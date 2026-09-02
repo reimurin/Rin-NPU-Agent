@@ -1,0 +1,684 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawer_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rin_bg"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/rin_bg"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            android:background="@color/rin_surface"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="12dp">
+
+            <ImageButton
+                android:id="@+id/btn_open_drawer"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/rin_bg_icon_button"
+                android:contentDescription="@string/open_menu"
+                android:padding="10dp"
+                android:src="@drawable/ic_menu_24"
+                app:tint="@color/rin_text_primary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/tv_top_title"
+                    style="@style/TextAppearance.Rin.PageTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name" />
+                <TextView
+                    android:id="@+id/tv_top_mode"
+                    style="@style/TextAppearance.Rin.Caption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:text="@string/mode_chat" />
+            </LinearLayout>
+
+            <View android:layout_width="44dp" android:layout_height="44dp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/chat_mode_container"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rv_chat"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:paddingStart="10dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="6dp"
+                    android:scrollbars="vertical"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+                <HorizontalScrollView
+                    android:id="@+id/scroll_images"
+                    android:layout_width="match_parent"
+                    android:layout_height="92dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:overScrollMode="never"
+                    android:visibility="gone">
+                    <LinearLayout
+                        android:id="@+id/ll_images_container"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Rin.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="10dp"
+                    android:layout_marginBottom="10dp"
+                    app:cardCornerRadius="24dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingStart="10dp"
+                        android:paddingTop="6dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="6dp">
+                        <EditText
+                            android:id="@+id/et_input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:maxLines="8"
+                            android:background="@null"
+                            android:gravity="top|start"
+                            android:hint="@string/prompt_hint"
+                            android:imeOptions="actionSend"
+                            android:inputType="textMultiLine|textCapSentences"
+                            android:padding="10dp"
+                            android:textColor="@color/rin_text_primary"
+                            android:textColorHint="@color/rin_text_tertiary"
+                            android:textSize="16sp" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+                            <ImageButton
+                                android:id="@+id/btn_add_image"
+                                android:layout_width="42dp"
+                                android:layout_height="42dp"
+                                android:background="@drawable/rin_bg_icon_button"
+                                android:contentDescription="@string/add_image"
+                                android:padding="9dp"
+                                android:src="@drawable/ic_add_image_24"
+                                android:visibility="gone"
+                                app:tint="@color/rin_text_primary" />
+                            <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                            <ImageButton
+                                android:id="@+id/btn_send"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_send_circle"
+                                android:contentDescription="@string/send"
+                                android:padding="9dp"
+                                android:src="@drawable/ic_send_24"
+                                app:tint="@color/rin_on_primary" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/image_mode_container"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:fillViewport="true"
+                android:paddingBottom="20dp"
+                android:visibility="gone">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="14dp"
+                    android:paddingTop="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingBottom="24dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                style="@style/TextAppearance.Rin.PageTitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/image_workbench_title" />
+                            <TextView
+                                style="@style/TextAppearance.Rin.Caption"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/image_workbench_subtitle" />
+                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/tv_image_model_badge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:background="@drawable/rin_bg_mode_selected"
+                            android:gravity="center"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:text="@string/image_model_badge"
+                            android:textColor="@color/rin_primary"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="14dp">
+                            <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/positive_prompt" />
+                            <com.google.android.material.textfield.TextInputLayout
+                                style="@style/Widget.Rin.TextInputLayout"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:hint="@string/positive_prompt_hint">
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/et_image_prompt"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:minLines="4"
+                                    android:maxLines="8"
+                                    android:gravity="top|start"
+                                    android:inputType="textMultiLine"
+                                    android:textColor="@color/rin_text_primary"
+                                    android:textSize="15sp" />
+                            </com.google.android.material.textfield.TextInputLayout>
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:gravity="end"
+                                android:orientation="horizontal">
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btn_positive_preset_select"
+                                    style="@style/Widget.Rin.Button.Ghost"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:text="@string/select_positive_preset" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btn_positive_preset_save"
+                                    style="@style/Widget.Rin.Button.Secondary"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginStart="6dp"
+                                    android:text="@string/save_positive_preset"
+                                    app:icon="@drawable/ic_save_24"
+                                    app:iconSize="18dp" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="14dp">
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                                <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/negative_prompt" />
+                                <com.google.android.material.switchmaterial.SwitchMaterial
+                                    android:id="@+id/switch_lock_negative"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/lock_negative"
+                                    android:textColor="@color/rin_text_secondary"
+                                    android:textSize="12sp" />
+                            </LinearLayout>
+                            <com.google.android.material.textfield.TextInputLayout
+                                style="@style/Widget.Rin.TextInputLayout"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:hint="@string/negative_prompt_hint">
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/et_image_negative_prompt"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:minLines="3"
+                                    android:maxLines="7"
+                                    android:gravity="top|start"
+                                    android:inputType="textMultiLine"
+                                    android:textColor="@color/rin_text_primary"
+                                    android:textSize="15sp" />
+                            </com.google.android.material.textfield.TextInputLayout>
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:gravity="end"
+                                android:orientation="horizontal">
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btn_negative_preset_select"
+                                    style="@style/Widget.Rin.Button.Ghost"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:text="@string/select_negative_preset" />
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btn_negative_preset_save"
+                                    style="@style/Widget.Rin.Button.Secondary"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginStart="6dp"
+                                    android:text="@string/save_negative_preset"
+                                    app:icon="@drawable/ic_save_24"
+                                    app:iconSize="18dp" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card.Soft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="14dp">
+                            <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/image_generation_settings" />
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:gravity="center_vertical" android:orientation="horizontal">
+                                <TextView style="@style/TextAppearance.Rin.Body" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/resolution" />
+                                <Spinner
+                                    android:id="@+id/sp_image_resolution"
+                                    android:layout_width="158dp"
+                                    android:layout_height="44dp"
+                                    android:background="@drawable/rin_bg_control"
+                                    android:paddingStart="10dp"
+                                    android:paddingEnd="8dp" />
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:gravity="center_vertical" android:orientation="horizontal">
+                                <TextView style="@style/TextAppearance.Rin.Body" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/acceleration_profile" />
+                                <Spinner
+                                    android:id="@+id/sp_image_profile"
+                                    android:layout_width="158dp"
+                                    android:layout_height="44dp"
+                                    android:background="@drawable/rin_bg_control"
+                                    android:paddingStart="10dp"
+                                    android:paddingEnd="8dp" />
+                            </LinearLayout>
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/switch_live_preview"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="@string/live_preview"
+                                android:textColor="@color/rin_text_primary" />
+                            <TextView
+                                style="@style/TextAppearance.Rin.Caption"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/live_preview_hint" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="340dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/rin_bg_preview">
+                        <ImageView
+                            android:id="@+id/iv_image_generation_preview"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@string/generated_image"
+                            android:scaleType="fitCenter" />
+                        <LinearLayout
+                            android:id="@+id/image_preview_placeholder"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:padding="24dp">
+                            <ImageView
+                                android:layout_width="42dp"
+                                android:layout_height="42dp"
+                                android:alpha="0.45"
+                                android:src="@drawable/ic_image_mode_24"
+                                app:tint="@color/rin_text_secondary" />
+                            <TextView
+                                style="@style/TextAppearance.Rin.Body"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:text="@string/image_preview_empty"
+                                android:textColor="@color/rin_text_secondary" />
+                            <TextView
+                                style="@style/TextAppearance.Rin.Caption"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:gravity="center"
+                                android:text="@string/image_preview_empty_hint" />
+                        </LinearLayout>
+                    </FrameLayout>
+
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/image_generation_progress"
+                        style="@style/Widget.Rin.Progress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:indeterminate="false"
+                        android:max="100"
+                        android:progress="0" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:id="@+id/tv_image_generation_status"
+                            style="@style/TextAppearance.Rin.Body"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/image_status_idle" />
+                        <TextView
+                            android:id="@+id/tv_image_generation_step"
+                            style="@style/TextAppearance.Rin.Caption"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/image_step_idle" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/tv_image_generation_timing"
+                        style="@style/TextAppearance.Rin.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="horizontal">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_image_generate"
+                            style="@style/Widget.Rin.Button.Primary"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_weight="1"
+                            android:text="@string/generate_image"
+                            app:icon="@drawable/ic_magic_24"
+                            app:iconSize="20dp" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_image_stop"
+                            style="@style/Widget.Rin.Button.Danger"
+                            android:layout_width="wrap_content"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="8dp"
+                            android:text="@string/stop_generation"
+                            android:visibility="gone" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_image_save"
+                            style="@style/Widget.Rin.Button.Secondary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="8dp"
+                            android:text="@string/save_image"
+                            android:visibility="gone"
+                            app:icon="@drawable/ic_save_24"
+                            app:iconSize="18dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="326dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@color/rin_surface"
+        android:elevation="16dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="116dp"
+            android:orientation="vertical"
+            android:paddingStart="14dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="8dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <TextView
+                    style="@style/TextAppearance.Rin.PageTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/app_name" />
+                <ImageButton
+                    android:id="@+id/btn_close_drawer"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="@drawable/rin_bg_icon_button"
+                    android:contentDescription="@string/close_menu"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_close_24"
+                    app:tint="@color/rin_text_primary" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_mode_switch"
+                style="@style/Widget.Rin.Button.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="6dp"
+                android:gravity="start|center_vertical"
+                android:text="@string/mode_chat"
+                app:icon="@drawable/ic_chat_mode_24"
+                app:iconGravity="textStart"
+                app:iconSize="20dp" />
+        </LinearLayout>
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/rin_outline" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="12dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="24dp">
+
+                <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/drawer_projects" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_new_project"
+                    style="@style/Widget.Rin.Button.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="@string/new_project" />
+                <TextView
+                    android:id="@+id/tv_current_project"
+                    style="@style/TextAppearance.Rin.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="10dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="4dp"
+                    android:text="@string/current_project_none"
+                    android:textStyle="bold" />
+                <LinearLayout android:id="@+id/ll_project_list" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+
+                <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/drawer_conversations" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_new_conversation"
+                    style="@style/Widget.Rin.Button.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="@string/new_chat" />
+                <LinearLayout android:id="@+id/ll_conversation_list" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="vertical" />
+                <TextView
+                    android:id="@+id/tv_history_empty"
+                    style="@style/TextAppearance.Rin.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="10dp"
+                    android:text="@string/history_empty" />
+
+                <LinearLayout
+                    android:id="@+id/drawer_chat_settings_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/drawer_models" />
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card.Soft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                            <FrameLayout android:layout_width="match_parent" android:layout_height="46dp">
+                                <Spinner android:id="@+id/sp_model_list" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/rin_bg_control" android:paddingStart="8dp" android:paddingEnd="8dp" />
+                                <View android:id="@+id/v_tip" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" />
+                            </FrameLayout>
+                            <TextView android:id="@+id/tv_model_state" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="6dp" android:paddingBottom="8dp" android:text="@string/model_state_none" />
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_quick_install_model" style="@style/Widget.Rin.Button.Primary" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginBottom="8dp" android:text="@string/quick_install_recommended_model" android:visibility="gone" />
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                                <com.google.android.material.button.MaterialButton android:id="@+id/btn_load_model" style="@style/Widget.Rin.Button.Primary" android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1" android:text="@string/load_model" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/btn_unload_model" style="@style/Widget.Rin.Button.Secondary" android:layout_width="0dp" android:layout_height="42dp" android:layout_marginStart="8dp" android:layout_weight="1" android:text="@string/unload_model" android:visibility="gone" />
+                            </LinearLayout>
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_library" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="8dp" android:text="@string/model_library" />
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_stop" style="@style/Widget.Rin.Button.Danger" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="8dp" android:text="@string/stop_generation" android:visibility="gone" />
+                            <LinearLayout android:id="@+id/ll_loading" android:layout_width="match_parent" android:layout_height="40dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+                                <ProgressBar android:layout_width="22dp" android:layout_height="22dp" />
+                                <TextView style="@style/TextAppearance.Rin.Caption" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:text="@string/loading" />
+                            </LinearLayout>
+                            <Button android:id="@+id/btn_download" android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+                            <LinearLayout android:id="@+id/ll_downloading" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                                <ProgressBar android:id="@+id/pb_downloading" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="4dp" />
+                                <TextView android:id="@+id/tv_download_progress" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="0%" />
+                                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_cancel_download" style="@style/Widget.Rin.Button.Ghost" android:layout_width="0dp" android:layout_height="38dp" android:layout_weight="1" android:text="@string/cancel" />
+                                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_retry_download" style="@style/Widget.Rin.Button.Secondary" android:layout_width="0dp" android:layout_height="38dp" android:layout_weight="1" android:text="@string/retry" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/drawer_agent" />
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card.Soft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                            <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch_agent" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/agent_mode" android:textColor="@color/rin_text_primary" />
+                            <TextView android:id="@+id/tv_workspace" style="@style/TextAppearance.Rin.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:ellipsize="middle" android:maxLines="2" android:text="@string/workspace_not_selected" />
+                            <TextView android:id="@+id/tv_workspace_status" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/workspace_status_none" />
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_choose_workspace" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="10dp" android:text="@string/choose_workspace" />
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:orientation="horizontal">
+                                <com.google.android.material.button.MaterialButton android:id="@+id/btn_test_workspace" style="@style/Widget.Rin.Button.Ghost" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="@string/test_workspace" />
+                                <com.google.android.material.button.MaterialButton android:id="@+id/btn_clear_workspace" style="@style/Widget.Rin.Button.Ghost" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="@string/clear_workspace" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/drawer_image_settings_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+                    <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/image_runtime_section" />
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card.Soft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                            <TextView style="@style/TextAppearance.Rin.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="WAI Illustrious SDXL" android:textStyle="bold" />
+                            <TextView android:id="@+id/tv_image_runtime_status" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/image_runtime_unknown" />
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_image_install_runtime" style="@style/Widget.Rin.Button.Primary" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="10dp" android:text="@string/install_image_runtime" />
+                            <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/image_runtime_install_progress" style="@style/Widget.Rin.Progress" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:max="100" android:visibility="gone" />
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_image_check_runtime" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="10dp" android:text="@string/check_image_runtime" />
+                            <TextView style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="@string/image_runtime_default_path" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_clear_history"
+                    style="@style/Widget.Rin.Button.Ghost"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/clear_history" />
+                <Button android:id="@+id/btn_test" android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" tools:ignore="SmallSp" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+</androidx.drawerlayout.widget.DrawerLayout>

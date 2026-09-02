@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Rin design system: quiet graphite + muted blue-gray -->
+    <color name="rin_bg">#F7F8F7</color>
+    <color name="rin_surface">#FFFFFFFF</color>
+    <color name="rin_surface_soft">#F1F3F2</color>
+    <color name="rin_surface_raised">#FAFBFA</color>
+    <color name="rin_surface_selected">#E9EEF2</color>
+    <color name="rin_surface_pressed">#E3E8EC</color>
+    <color name="rin_outline">#E2E5E3</color>
+    <color name="rin_outline_strong">#D3D8D5</color>
+    <color name="rin_text_primary">#202326</color>
+    <color name="rin_text_secondary">#6D7378</color>
+    <color name="rin_text_tertiary">#92989D</color>
+    <color name="rin_primary">#435A70</color>
+    <color name="rin_primary_pressed">#34495E</color>
+    <color name="rin_on_primary">#FFFFFFFF</color>
+    <color name="rin_primary_soft">#E7EDF2</color>
+    <color name="rin_success">#2D7A58</color>
+    <color name="rin_success_soft">#E7F3ED</color>
+    <color name="rin_warning">#A86B27</color>
+    <color name="rin_warning_soft">#FAF0E3</color>
+    <color name="rin_danger">#A94E4E</color>
+    <color name="rin_danger_soft">#F8EAEA</color>
+    <color name="rin_scrim">#52000000</color>
+
+    <!-- Compatibility aliases for legacy layouts -->
+    <color name="bg_normal">@color/rin_bg</color>
+    <color name="font_black">@color/rin_text_primary</color>
+    <color name="purple_200">@color/rin_primary_soft</color>
+    <color name="purple_500">@color/rin_primary</color>
+    <color name="purple_700">@color/rin_primary_pressed</color>
+    <color name="teal_200">@color/rin_success_soft</color>
+    <color name="teal_700">@color/rin_success</color>
+</resources>

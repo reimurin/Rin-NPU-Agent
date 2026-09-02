@@ -1,0 +1,3 @@
+Model-To-NPU
+https://github.com/VitalikDen0/Model-To-NPU
+Bundled runtime driver sources are used under the included PolyForm Noncommercial License 1.0.0 and NOTICE.

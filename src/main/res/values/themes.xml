@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GenieXDemo" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/rin_primary</item>
+        <item name="colorOnPrimary">@color/rin_on_primary</item>
+        <item name="colorPrimaryContainer">@color/rin_primary_soft</item>
+        <item name="colorOnPrimaryContainer">@color/rin_text_primary</item>
+        <item name="colorSurface">@color/rin_surface</item>
+        <item name="colorSurfaceVariant">@color/rin_surface_soft</item>
+        <item name="colorOutline">@color/rin_outline</item>
+        <item name="android:colorAccent">@color/rin_primary</item>
+        <item name="android:windowBackground">@color/rin_bg</item>
+        <item name="android:navigationBarColor">@color/rin_surface</item>
+        <item name="android:statusBarColor">@color/rin_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="materialButtonStyle">@style/Widget.Rin.Button.Secondary</item>
+        <item name="textInputStyle">@style/Widget.Rin.TextInputLayout</item>
+    </style>
+
+    <style name="TransparentBottomSheetDialog" parent="Theme.Material3.Light.BottomSheetDialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>

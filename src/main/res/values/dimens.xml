@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="rin_space_2">2dp</dimen>
+    <dimen name="rin_space_4">4dp</dimen>
+    <dimen name="rin_space_6">6dp</dimen>
+    <dimen name="rin_space_8">8dp</dimen>
+    <dimen name="rin_space_12">12dp</dimen>
+    <dimen name="rin_space_16">16dp</dimen>
+    <dimen name="rin_space_20">20dp</dimen>
+    <dimen name="rin_space_24">24dp</dimen>
+    <dimen name="rin_radius_small">12dp</dimen>
+    <dimen name="rin_radius_control">16dp</dimen>
+    <dimen name="rin_radius_card">20dp</dimen>
+    <dimen name="rin_radius_input">22dp</dimen>
+    <dimen name="rin_radius_pill">24dp</dimen>
+    <dimen name="rin_control_height">44dp</dimen>
+    <dimen name="rin_control_height_large">50dp</dimen>
+</resources>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/rin_surface"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        style="@style/TextAppearance.Rin.PageTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/load_model_config" />
+    <TextView
+        style="@style/TextAppearance.Rin.Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/model_compute_unit_hint" />
+
+    <RadioGroup
+        android:id="@+id/rg_select_plugin_id"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical">
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/rb_npu"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:background="@drawable/rin_bg_control"
+            android:buttonTint="@color/rin_primary"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="NPU · Hexagon"
+            android:textColor="@color/rin_text_primary"
+            android:visibility="gone" />
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/rb_gpu"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/rin_bg_control"
+            android:buttonTint="@color/rin_primary"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="GPU"
+            android:textColor="@color/rin_text_primary"
+            android:visibility="gone"
+            tools:visibility="visible" />
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/rb_cpu"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/rin_bg_control"
+            android:buttonTint="@color/rin_primary"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="CPU"
+            android:textColor="@color/rin_text_primary"
+            android:visibility="gone" />
+    </RadioGroup>
+
+    <LinearLayout
+        android:id="@+id/ll_gpu_layers"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/rin_bg_control"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+        <TextView
+            style="@style/TextAppearance.Rin.Body"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/gpu_layers_label" />
+        <EditText
+            android:id="@+id/et_gpu_layers"
+            android:layout_width="72dp"
+            android:layout_height="40dp"
+            android:background="@android:color/transparent"
+            android:gravity="center"
+            android:inputType="number"
+            android:maxLength="3"
+            android:text="999"
+            android:textColor="@color/rin_text_primary" />
+    </LinearLayout>
+</LinearLayout>

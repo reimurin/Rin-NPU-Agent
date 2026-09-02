@@ -1,0 +1,31 @@
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+
+# Local SDK / toolchain / models
+android-sdk/
+toolchain/
+model-cache/
+test-model-cache/
+*.gguf
+*.safetensors
+*.bin.tmp
+
+# Signing / deployment / secrets
+*.jks
+*.keystore
+*.pem
+*.key
+.deploy.local.json
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
