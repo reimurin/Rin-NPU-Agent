@@ -34,7 +34,7 @@ class ImageModeController(
     private val prefs = activity.getSharedPreferences("rin_image_ui", Activity.MODE_PRIVATE)
     private val presetStore = PromptPresetStore(activity)
     private val runtime = ImageGenerationRuntime(activity)
-    private val installer = ImageRuntimeInstaller(activity, runtime)
+    private val installer = GitHubImageRuntimeInstaller(activity, runtime)
     private var currentMode = runCatching {
         AppMode.valueOf(prefs.getString(KEY_MODE, AppMode.CHAT.name) ?: AppMode.CHAT.name)
     }.getOrDefault(AppMode.CHAT)

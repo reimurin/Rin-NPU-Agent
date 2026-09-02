@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "catalog": "Rin NPU Agent precompiled image runtimes",
+  "packages": [
+    {
+      "id": "wai-illustrious-sdxl-lightning8-sm8750",
+      "display_name": "WAI Illustrious SDXL · Lightning 8-step · SM8750",
+      "status": "building",
+      "version": "sm8750-r1",
+      "model_family": "sdxl",
+      "chipsets": [
+        "SM8750"
+      ],
+      "abis": [
+        "arm64-v8a"
+      ],
+      "runtime": "qnn-htp",
+      "steps": 8,
+      "resolutions": [
+        "1024x1024"
+      ],
+      "package_format": "split-zip",
+      "message": "The first SM8750 WAI NPU package is being built.",
+      "message_zh": "首个 SM8750 WAI NPU 预编译包正在构建。",
+      "archive": {
+        "bytes": 0,
+        "sha256": ""
+      },
+      "parts": []
+    }
+  ]
+}
