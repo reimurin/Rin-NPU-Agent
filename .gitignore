@@ -29,3 +29,6 @@ test-model-cache/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Local patch backups
+*.rinbak-*
