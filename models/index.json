@@ -5,7 +5,7 @@
     {
       "id": "wai-illustrious-sdxl-lightning8-sm8750",
       "display_name": "WAI Illustrious SDXL · Lightning 8-step · SM8750",
-      "status": "building",
+      "status": "published",
       "version": "sm8750-r1",
       "model_family": "sdxl",
       "chipsets": [
@@ -20,13 +20,39 @@
         "1024x1024"
       ],
       "package_format": "split-zip",
-      "message": "The first SM8750 WAI NPU package is being built.",
-      "message_zh": "首个 SM8750 WAI NPU 预编译包正在构建。",
+      "message": "SM8750 test runtime package is published for end-to-end device validation.",
+      "message_zh": "SM8750 测试运行时包已发布，用于端到端实机验证。",
       "archive": {
-        "bytes": 0,
-        "sha256": ""
+        "name": "wai-illustrious-sdxl-lightning8-sm8750-r1.zip",
+        "bytes": 6083530035,
+        "sha256": "8ac92cf29e062db4b95a0d3fefbdb60598476b1cc56a36a5ace0c4df7fd76498"
       },
-      "parts": []
+      "parts": [
+        {
+          "name": "wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part01",
+          "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-test/wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part01",
+          "bytes": 1572864000,
+          "sha256": "3f6a7c741ad3b86a3cce18a6befccdd347a639110b8599360ca4ab3b9c495f40"
+        },
+        {
+          "name": "wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part02",
+          "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-test/wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part02",
+          "bytes": 1572864000,
+          "sha256": "73d3cb08e0fd939568a4076589204e0bab57e32de84b28ed1543634c80c179ec"
+        },
+        {
+          "name": "wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part03",
+          "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-test/wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part03",
+          "bytes": 1572864000,
+          "sha256": "23e6f26a32764f3bcb1003f9867e8e8fbf6874587e7af4ec9432e99b8555bb7d"
+        },
+        {
+          "name": "wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part04",
+          "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-test/wai-illustrious-sdxl-lightning8-sm8750-r1.zip.part04",
+          "bytes": 1364938035,
+          "sha256": "910eb69b87a04f345dbb3d3be09e8d061d598f470975083857b747dddfee3017"
+        }
+      ]
     }
   ]
 }
