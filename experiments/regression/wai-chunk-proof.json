@@ -1,0 +1,206 @@
+{
+  "numerical_tests": 15,
+  "cases": [
+    {
+      "rank": 8,
+      "scale": 0,
+      "max_error": 0.0
+    },
+    {
+      "rank": 8,
+      "scale": 0.8,
+      "max_error": 0.0
+    },
+    {
+      "rank": 8,
+      "scale": 1.1,
+      "max_error": 0.0
+    },
+    {
+      "rank": 8,
+      "scale": -0.5,
+      "max_error": 0.0
+    },
+    {
+      "rank": 8,
+      "scale": 0,
+      "max_error": 0.0
+    },
+    {
+      "rank": 16,
+      "scale": 0,
+      "max_error": 0.0
+    },
+    {
+      "rank": 16,
+      "scale": 0.8,
+      "max_error": 0.0
+    },
+    {
+      "rank": 16,
+      "scale": 1.1,
+      "max_error": 0.0
+    },
+    {
+      "rank": 16,
+      "scale": -0.5,
+      "max_error": 0.0
+    },
+    {
+      "rank": 16,
+      "scale": 0,
+      "max_error": 0.0
+    },
+    {
+      "rank": 32,
+      "scale": 0,
+      "max_error": 0.0
+    },
+    {
+      "rank": 32,
+      "scale": 0.8,
+      "max_error": 0.0
+    },
+    {
+      "rank": 32,
+      "scale": 1.1,
+      "max_error": 0.0
+    },
+    {
+      "rank": 32,
+      "scale": -0.5,
+      "max_error": 0.0
+    },
+    {
+      "rank": 32,
+      "scale": 0,
+      "max_error": 0.0
+    }
+  ],
+  "stages": {
+    "encoder": {
+      "modules": 362,
+      "chunks": 8,
+      "chunk_summary": [
+        {
+          "id": "encoder_00",
+          "inputs": 69,
+          "outputs": 11,
+          "modules": 64,
+          "weight_bytes": 535316480
+        },
+        {
+          "id": "encoder_01",
+          "inputs": 52,
+          "outputs": 1,
+          "modules": 50,
+          "weight_bytes": 695118800
+        },
+        {
+          "id": "encoder_02",
+          "inputs": 46,
+          "outputs": 2,
+          "modules": 42,
+          "weight_bytes": 687208080
+        },
+        {
+          "id": "encoder_03",
+          "inputs": 53,
+          "outputs": 1,
+          "modules": 51,
+          "weight_bytes": 701687800
+        },
+        {
+          "id": "encoder_04",
+          "inputs": 52,
+          "outputs": 1,
+          "modules": 50,
+          "weight_bytes": 695118800
+        },
+        {
+          "id": "encoder_05",
+          "inputs": 47,
+          "outputs": 3,
+          "modules": 43,
+          "weight_bytes": 693777080
+        },
+        {
+          "id": "encoder_06",
+          "inputs": 52,
+          "outputs": 1,
+          "modules": 50,
+          "weight_bytes": 695118800
+        },
+        {
+          "id": "encoder_07",
+          "inputs": 16,
+          "outputs": 1,
+          "modules": 12,
+          "weight_bytes": 270136800
+        }
+      ]
+    },
+    "decoder": {
+      "modules": 381,
+      "chunks": 8,
+      "chunk_summary": [
+        {
+          "id": "decoder_00",
+          "inputs": 46,
+          "outputs": 3,
+          "modules": 42,
+          "weight_bytes": 759323280
+        },
+        {
+          "id": "decoder_01",
+          "inputs": 52,
+          "outputs": 1,
+          "modules": 50,
+          "weight_bytes": 695118800
+        },
+        {
+          "id": "decoder_02",
+          "inputs": 48,
+          "outputs": 2,
+          "modules": 43,
+          "weight_bytes": 765882040
+        },
+        {
+          "id": "decoder_03",
+          "inputs": 52,
+          "outputs": 1,
+          "modules": 50,
+          "weight_bytes": 695118800
+        },
+        {
+          "id": "decoder_04",
+          "inputs": 48,
+          "outputs": 2,
+          "modules": 43,
+          "weight_bytes": 733108920
+        },
+        {
+          "id": "decoder_05",
+          "inputs": 52,
+          "outputs": 1,
+          "modules": 50,
+          "weight_bytes": 695118800
+        },
+        {
+          "id": "decoder_06",
+          "inputs": 61,
+          "outputs": 1,
+          "modules": 55,
+          "weight_bytes": 683967640
+        },
+        {
+          "id": "decoder_07",
+          "inputs": 55,
+          "outputs": 1,
+          "modules": 48,
+          "weight_bytes": 268763536
+        }
+      ]
+    }
+  }
+}
