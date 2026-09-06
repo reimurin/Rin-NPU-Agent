@@ -6,6 +6,15 @@ def status(root,stage,**extra):
     text=json.dumps({'stage':stage,'time':time.strftime('%Y-%m-%d %H:%M:%S'),**extra},indent=2)
     temp=root/'status.pending';temp.write_text(text);os.replace(temp,root/'status.json');print(text,flush=True)
 
+def available_bytes():
+    import ctypes
+    from ctypes import wintypes
+    class Memory(ctypes.Structure):
+        _fields_=[('length',wintypes.DWORD),('load',wintypes.DWORD)]+[(n,ctypes.c_ulonglong) for n in ['total','available','page_total','page_available','virtual_total','virtual_available','extended']]
+    memory=Memory();memory.length=ctypes.sizeof(memory)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory)):raise ctypes.WinError()
+    return int(memory.available)
+
 def child(root,sdk,stage):
     tmp=root/'tmp'/stage;tmp.mkdir(parents=True,exist_ok=True)
     os.environ.update(QAIRT_SDK_ROOT=str(sdk),QNN_SDK_ROOT=str(sdk),QAIRT_TMP_DIR=str(tmp),TMP=str(tmp),TEMP=str(tmp))
@@ -20,8 +29,7 @@ def main():
     root=Path(args.out).resolve();sdk=Path(args.sdk_root).resolve()
     if args.child:child(root,sdk,args.child);return
     if root.exists():raise SystemExit('Existing build directory: inspect status, do not resubmit')
-    import psutil
-    if psutil.virtual_memory().available<180*1024**3:raise SystemExit('Need 180 GiB free for offline compilation')
+    if available_bytes()<180*1024**3:raise SystemExit('Need 180 GiB free for offline compilation')
     root.mkdir(parents=True);(root/'package').mkdir();(root/'logs').mkdir()
     try:
         status(root,'BUILDING_GRAPH',runner_pid=os.getpid())
@@ -32,12 +40,12 @@ def main():
         (root/'package/manifest.build.json').write_text(json.dumps(manifest,indent=2))
         env=os.environ.copy();env['PATH']=str(sdk/'lib/x86_64-windows-msvc')+os.pathsep+env.get('PATH','')
         for stage in ['encoder','decoder']:
-            if psutil.virtual_memory().available<160*1024**3:raise RuntimeError('Insufficient free memory before '+stage)
+            if available_bytes()<160*1024**3:raise RuntimeError('Insufficient free memory before '+stage)
             cmd=[sys.executable,'-B',__file__,'--model-root',args.model_root,'--sdk-root',str(sdk),'--out',str(root),'--child',stage]
             with (root/'logs'/(stage+'.log')).open('w',encoding='utf-8') as log:
                 proc=subprocess.Popen(cmd,env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,creationflags=0x08000000|0x4000)
                 while proc.poll() is None:
-                    status(root,'COMPILING_'+stage.upper(),runner_pid=os.getpid(),child_pid=proc.pid,free_bytes=psutil.virtual_memory().available)
+                    status(root,'COMPILING_'+stage.upper(),runner_pid=os.getpid(),child_pid=proc.pid,free_bytes=available_bytes())
                     time.sleep(10)
                 if proc.returncode:raise RuntimeError(stage+' compiler returned '+str(proc.returncode))
             path=root/'package'/(stage+'.bin');assert path.is_file() and path.stat().st_size>4096
