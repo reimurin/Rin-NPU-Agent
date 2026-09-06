@@ -14,12 +14,12 @@ import kotlin.math.abs
 import kotlin.math.min
 
 internal class PresetSwipeRow(context: Context) : FrameLayout(context) {
-    private val actions=LinearLayout(context).apply { orientation=LinearLayout.HORIZONTAL }
+    private val actions=LinearLayout(context).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(dp(4),dp(8),dp(4),dp(8)) }
     private val front=LinearLayout(context).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL }
     private val texts=LinearLayout(context).apply { orientation=LinearLayout.VERTICAL }
     private val title=TextView(context).apply { textSize=16f;maxLines=2 }
     private val note=TextView(context).apply { textSize=13f;maxLines=2 }
-    private val more=AppCompatButton(context).apply { text="⋮";textSize=22f;minWidth=0;minimumWidth=0;contentDescription="展开预设操作" }
+    private val more=RinControls.button(context,RinControls.Tone.GHOST).apply { text="⋮";textSize=22f;minWidth=0;minimumWidth=0;contentDescription="展开预设操作" }
     private var actionWidth=dp(216).toFloat()
     private var startX=0f;private var startY=0f;private var origin=0f
     private var dragging=false;private var hitsActions=false
@@ -29,7 +29,7 @@ internal class PresetSwipeRow(context: Context) : FrameLayout(context) {
     val isOpen:Boolean get()=opened
     init {
         minimumHeight=dp(100);clipChildren=true
-        front.background=GradientDrawable().apply { cornerRadius=dp(14).toFloat();setColor(ContextCompat.getColor(context,R.color.rin_surface));setStroke(dp(1),ContextCompat.getColor(context,R.color.rin_outline)) }
+        front.background=GradientDrawable().apply { cornerRadius=dp(20).toFloat();setColor(ContextCompat.getColor(context,R.color.rin_surface));setStroke(dp(1),ContextCompat.getColor(context,R.color.rin_outline)) }
         front.setPadding(dp(14),dp(12),dp(6),dp(12))
         title.setTextColor(ContextCompat.getColor(context,R.color.rin_text_primary));note.setTextColor(ContextCompat.getColor(context,R.color.rin_text_secondary))
         texts.addView(title);texts.addView(note)
@@ -44,13 +44,13 @@ internal class PresetSwipeRow(context: Context) : FrameLayout(context) {
         front.setOnClickListener { if(isOpen)revealActions(false) else select() }
         actions.removeAllViews()
         listOf(Triple(if(item.pinned)"取消置顶" else "置顶","pin",pin),Triple("编辑","edit",edit),Triple("删除","delete",delete)).forEach { (label,id,handler)->
-            val button=AppCompatButton(context).apply {
+            val button=RinControls.button(context,if(id=="delete") RinControls.Tone.DANGER else RinControls.Tone.SECONDARY).apply {
                 text=label;textSize=13f;isAllCaps=false;minWidth=0;minimumWidth=0;setPadding(dp(2),dp(4),dp(2),dp(4))
                 tag="action_$id";contentDescription="$label：${item.name}"
                 setTextColor(ContextCompat.getColor(context,if(id=="delete")R.color.rin_danger else R.color.rin_text_primary))
                 setOnClickListener { if(isOpen)handler() }
             }
-            actions.addView(button,LinearLayout.LayoutParams(0,-1,1f))
+            actions.addView(button,LinearLayout.LayoutParams(0,-2,1f).apply { marginStart=dp(3);marginEnd=dp(3) })
         }
     }
     override fun onSizeChanged(w:Int,h:Int,oldw:Int,oldh:Int) {

@@ -62,6 +62,16 @@ class ImageModeController(
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == REQUEST_LORA_EDITOR) {
+            if (resultCode == Activity.RESULT_OK) {
+                data?.getStringExtra(LoraLabActivity.EXTRA_PROMPT)?.let { text ->
+                    runCatching { LoraTags.parse(text) }.onSuccess { binding.etImagePrompt.setText(text) }
+                        .onFailure { Toast.makeText(activity,it.message ?: "LoRA 标签无效",Toast.LENGTH_LONG).show() }
+                }
+            }
+            return true
+        }
+
         if (requestCode != REQUEST_RUNTIME_DOWNLOAD_DIR) return false
         if (resultCode == Activity.RESULT_OK) {
             val uri = data?.data
@@ -140,15 +150,17 @@ class ImageModeController(
         binding.btnImageCheckRuntime.setOnClickListener {
             if (runtime.hasStorageAccess()) refreshRuntimeStatus(true) else requestAllFilesAccess()
         }
-        val loraButton = com.google.android.material.button.MaterialButton(activity).apply {
+        val loraButton = RinControls.button(activity).apply {
             text = "LoRA 管理与 NPU 测试";isAllCaps=false;contentDescription="打开 LoRA 管理与 NPU 测试"
             setOnClickListener {
                 if (runtime.isRunning()) Toast.makeText(activity,"请等待当前生图完成后再打开 LoRA 测试",Toast.LENGTH_LONG).show()
-                else activity.startActivity(Intent(activity,LoraLabActivity::class.java))
+                else if (installer.isBusy()) Toast.makeText(activity,"请先完成或暂停当前模型下载",Toast.LENGTH_LONG).show()
+                else activity.startActivityForResult(Intent(activity,LoraLabActivity::class.java)
+                    .putExtra(LoraLabActivity.EXTRA_PROMPT,binding.etImagePrompt.text?.toString().orEmpty()),REQUEST_LORA_EDITOR)
             }
         }
         binding.drawerImageSettingsGroup.addView(loraButton, LinearLayout.LayoutParams(-1,-2))
-        binding.drawerImageSettingsGroup.addView(com.google.android.material.button.MaterialButton(activity).apply {
+        binding.drawerImageSettingsGroup.addView(RinControls.button(activity).apply {
             text="分享启动诊断";isAllCaps=false
             setOnClickListener { StartupDiagnostics.share(activity) }
         },LinearLayout.LayoutParams(-1,-2))
@@ -163,7 +175,7 @@ class ImageModeController(
 
     private fun showModeDialog() {
         val items = arrayOf(activity.getString(R.string.mode_chat), activity.getString(R.string.mode_image))
-        AlertDialog.Builder(activity)
+        RinControls.dialog(activity)
             .setTitle(R.string.select_mode)
             .setSingleChoiceItems(items, if (currentMode == AppMode.CHAT) 0 else 1) { dialog, which ->
                 applyMode(if (which == 0) AppMode.CHAT else AppMode.IMAGE)
@@ -232,7 +244,7 @@ class ImageModeController(
             return
         }
         val items = arrayOf(activity.getString(R.string.runtime_download_mode_app), activity.getString(R.string.runtime_download_mode_browser))
-        AlertDialog.Builder(activity)
+        RinControls.dialog(activity)
             .setTitle(R.string.runtime_download_mode_title)
             .setItems(items) { _, which -> if (which == 0) startAcceleratedRuntimeInstall() else startBrowserDownloadFlow() }
             .setNegativeButton(android.R.string.cancel, null)
@@ -543,7 +555,7 @@ class ImageModeController(
         val name = EditText(activity).apply { hint = activity.getString(R.string.preset_name); setBackgroundResource(R.drawable.rin_bg_control) }
         val note = EditText(activity).apply { hint = activity.getString(R.string.preset_note_hint); minLines = 2; setBackgroundResource(R.drawable.rin_bg_control) }
         val root = editorLayout(name, note, null)
-        AlertDialog.Builder(activity).setTitle(R.string.positive_preset_title).setView(root)
+        RinControls.dialog(activity).setTitle(R.string.positive_preset_title).setView(root)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.save_positive_preset) { _, _ ->
                 runCatching { presetStore.savePositive(name = name.text.toString(), note = note.text.toString(), prompt = prompt) }
@@ -559,7 +571,7 @@ class ImageModeController(
         val note = EditText(activity).apply { hint = activity.getString(R.string.preset_note_hint); minLines = 2; setBackgroundResource(R.drawable.rin_bg_control) }
         val makeDefault = CheckBox(activity).apply { text = activity.getString(R.string.set_default_negative) }
         val root = editorLayout(name, note, makeDefault)
-        AlertDialog.Builder(activity).setTitle(R.string.negative_preset_title).setView(root)
+        RinControls.dialog(activity).setTitle(R.string.negative_preset_title).setView(root)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.save_negative_preset) { _, _ ->
                 runCatching {
@@ -595,6 +607,7 @@ class ImageModeController(
     private fun dp(value: Int): Int = (value * activity.resources.displayMetrics.density).toInt()
 
     companion object {
+        const val REQUEST_LORA_EDITOR = 16603
         private const val KEY_MODE = "mode"
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_NEGATIVE_LOCKED = "negative_locked"

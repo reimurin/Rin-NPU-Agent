@@ -35,8 +35,8 @@ internal class PresetManagerDialog(private val activity:Activity,private val sto
         val root=LinearLayout(activity).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(6),dp(16),0) }
         root.addView(TextView(activity).apply { text="点选使用；向左滑动可置顶、编辑或删除。也可点 ⋮ 展开。";textSize=14f;setPadding(0,dp(4),0,dp(12)) },LinearLayout.LayoutParams(-1,-2))
         root.addView(empty,LinearLayout.LayoutParams(-1,-2));recycler.adapter=adapter
-        root.addView(recycler,LinearLayout.LayoutParams(-1,(activity.resources.displayMetrics.heightPixels*0.55).toInt().coerceAtLeast(dp(200))))
-        dialog=AlertDialog.Builder(activity).setTitle(if(negative)"负面提示词预设" else "正向提示词预设").setView(root).setNegativeButton("关闭",null).create()
+        root.addView(recycler,LinearLayout.LayoutParams(-1,(activity.resources.displayMetrics.heightPixels*0.50).toInt().coerceAtLeast(dp(200))))
+        dialog=RinControls.dialog(activity).setTitle(if(negative)"负面提示词预设" else "正向提示词预设").setView(root).setNegativeButton("关闭",null).create()
         dialog.setOnDismissListener { opened?.revealActions(false,false);opened=null }
     }
     fun show():PresetManagerDialog { reload();dialog.show();return this }
@@ -56,27 +56,27 @@ internal class PresetManagerDialog(private val activity:Activity,private val sto
         runCatching {check(if(negative)store.setNegativePinned(item.id,!item.pinned) else store.setPositivePinned(item.id,!item.pinned));reload()}.onFailure(::error)
     }
     private fun confirmDelete(item:PresetListItem) {
-        AlertDialog.Builder(activity).setTitle("删除预设？").setMessage("删除“${item.name}”"+(if(item.isDefault)"后将不再有这条默认负面预设。" else "？"))
+        RinControls.dialog(activity).setTitle("删除预设？").setMessage("删除“${item.name}”"+(if(item.isDefault)"后将不再有这条默认负面预设。" else "？"))
             .setNegativeButton("取消",null).setPositiveButton("删除") {_,_->runCatching {if(negative)store.deleteNegative(item.id) else store.deletePositive(item.id);reload()}.onFailure(::error)}.show()
     }
     private fun edit(item:PresetListItem) {
-        val name=EditText(activity).apply{hint="预设名称";setSingleLine();setText(item.name);tag="preset_edit_name"}
-        val note=EditText(activity).apply{hint="备注";minLines=2;maxLines=5;setText(item.note);tag="preset_edit_note"}
-        val prompt=EditText(activity).apply{hint="提示词";minLines=4;maxLines=10;setText(item.prompt);tag="preset_edit_prompt"}
-        val default=CheckBox(activity).apply{text="设为默认负面预设";isChecked=item.isDefault;tag="preset_edit_default"}
+        val (nameField,name)=RinControls.input(activity,"预设名称",item.name,"preset_edit_name")
+        val (noteField,note)=RinControls.input(activity,"备注",item.note,"preset_edit_note",2,5)
+        val (promptField,prompt)=RinControls.input(activity,"提示词",item.prompt,"preset_edit_prompt",4,10)
+        val default=RinControls.check(activity).apply { text="设为默认负面预设";isChecked=item.isDefault;tag="preset_edit_default" }
         val root=LinearLayout(activity).apply {
             orientation=LinearLayout.VERTICAL;setPadding(dp(18),dp(8),dp(18),dp(8))
-            listOf(name,note,prompt).forEach{input->input.setBackgroundResource(R.drawable.rin_bg_control);addView(input,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(10)})}
+            listOf(nameField,noteField,promptField).forEach { input->addView(input,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)}) }
             if(negative)addView(default,LinearLayout.LayoutParams(-1,-2))
         }
-        val editor=AlertDialog.Builder(activity).setTitle("编辑预设").setView(ScrollView(activity).apply{addView(root)}).setNegativeButton("取消",null).setPositiveButton("保存",null).create()
+        val editor=RinControls.dialog(activity).setTitle("编辑预设").setView(ScrollView(activity).apply{addView(root)}).setNegativeButton("取消",null).setPositiveButton("保存",null).create()
         editor.setOnShowListener {
             editor.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                if(name.text.isBlank()){name.error="请输入名称";return@setOnClickListener}
-                if(prompt.text.isBlank()){prompt.error="请输入提示词";return@setOnClickListener}
+                if(name.text.isNullOrBlank()){name.error="请输入名称";return@setOnClickListener}
+                if(prompt.text.isNullOrBlank()){prompt.error="请输入提示词";return@setOnClickListener}
                 runCatching {
-                    if(negative)store.saveNegative(item.id,name.text.toString(),note.text.toString(),prompt.text.toString(),default.isChecked)
-                    else store.savePositive(item.id,name.text.toString(),note.text.toString(),prompt.text.toString())
+                    if(negative)store.saveNegative(item.id,name.text?.toString().orEmpty(),note.text?.toString().orEmpty(),prompt.text?.toString().orEmpty(),default.isChecked)
+                    else store.savePositive(item.id,name.text?.toString().orEmpty(),note.text?.toString().orEmpty(),prompt.text?.toString().orEmpty())
                     editor.dismiss();reload()
                 }.onFailure{error(it)}
             }

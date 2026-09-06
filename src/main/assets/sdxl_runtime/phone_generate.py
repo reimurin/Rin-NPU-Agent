@@ -32,6 +32,8 @@ import time
 
 import numpy as np
 from phone_runtime_accel import RuntimeTensorArena, get_runtime_accel
+from rin_lora import prepare as prepare_lora, LoraError
+_ACTIVE_LORA_SESSION = None
 from rin_tensor_io import (named_input, resolve_output, read_float_output, output_records,
                            write_input_rows, validate_input_list, prepare_output_dir, validate_output_tree)
 
@@ -1498,6 +1500,8 @@ class EulerDiscreteScheduler:
 
 
 def _can_use_qnn_daemon() -> bool:
+    if callable(getattr(_ACTIVE_LORA_SESSION, "stage_for", None)):
+        return False
     return QNN_USE_DAEMON and os.path.exists(QNN_CONTEXT_RUNNER) and os.path.exists(QNN_SYSTEM_LIB)
 
 
@@ -1994,6 +1998,8 @@ class _QnnMultiContextServer:
 
 
 def _can_use_qnn_server() -> bool:
+    if callable(getattr(_ACTIVE_LORA_SESSION, "stage_for", None)):
+        return False
     if not QNN_USE_SERVER:
         return False
     if QNN_SHARED_SERVER and os.path.exists(QNN_SERVER_REQ_FIFO) and os.path.exists(QNN_SERVER_RSP_FIFO):
@@ -2101,6 +2107,22 @@ def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_d
 
 
 def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
+            native_input=False, backend=None, model_path=None, config_file=None,
+            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None):
+    options = dict(backend=backend, model_path=model_path, config_file=config_file,
+                   use_mmap=use_mmap, perf_profile=perf_profile, net_run_path=net_run_path, profile_tag=profile_tag)
+    selector = getattr(_ACTIVE_LORA_SESSION, "stage_for", None)
+    stage = selector(ctx_path) if callable(selector) and ctx_path is not None else None
+    if stage is not None:
+        if model_path is not None: raise ValueError("Partitioned run cannot also specify model_path")
+        _log(f"[LoRA partitions] stage={stage} starting verified graph sequence")
+        return _ACTIVE_LORA_SESSION.execute(stage, input_list_path, output_dir, _qnn_run_single,
+            work_dir=WORK_DIR, native=native, native_input=native_input, **options)
+    return _qnn_run_single(ctx_path, input_list_path, output_dir, native,
+                           native_input=native_input, **options)
+
+
+def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
             native_input=False, backend=None, model_path=None, config_file=None,
             use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None):
     """Run QNN context on NPU via qnn-net-run."""
@@ -2850,6 +2872,15 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     if neg_prompt is None:
         neg_prompt = DEFAULT_NEG if use_cfg else ""
 
+    global _ACTIVE_LORA_SESSION
+    _ACTIVE_LORA_SESSION = None
+    _ACTIVE_LORA_SESSION = prepare_lora(prompt, neg_prompt, DR, width, height, log=_log)
+    if SDXL_QNN_LORA_SLOT and _ACTIVE_LORA_SESSION.metadata.get("active"):
+        raise LoraError("Do not combine a legacy precompiled LoRA slot with dynamic LoRA tags")
+    prompt, neg_prompt = _ACTIVE_LORA_SESSION.prompt, _ACTIVE_LORA_SESSION.negative
+    CONTEXTS.update(_ACTIVE_LORA_SESSION.contexts)
+    _write_atomic_json(os.path.join(QNN_DIAG_DIR, "lora_generation_latest.json"), _ACTIVE_LORA_SESSION.metadata)
+
     _ensure_unet_workdirs(use_cfg)
     runtime_prep_threads = _start_async_runtime_prep(preview)
     daemon_prewarm_threads: list[threading.Thread] = []
@@ -3388,10 +3419,16 @@ def _ensure_unet_workdirs(use_cfg):
         os.makedirs(f"{WORK_DIR}/unet/dec_batch", exist_ok=True)
 
 
+def _lora_inputs(stage):
+    if _ACTIVE_LORA_SESSION is None:
+        return []
+    entries = _ACTIVE_LORA_SESSION.inputs.get(stage, [])
+    return [entries] if isinstance(entries, str) else list(entries)
+
 def _enc_dec_inputs(base, smp_path, ts_path):
     return [named_input("encoder_hidden_states", f"{base}/enc.raw"),
             named_input("timestep", ts_path), named_input("time_ids", f"{base}/tid.raw"),
-            named_input("text_embeds", f"{base}/te.raw"), named_input("sample", smp_path)]
+            named_input("text_embeds", f"{base}/te.raw"), named_input("sample", smp_path)] + _lora_inputs("encoder")
 
 def _dec_entries_from_enc_out(base, enc_out_dir):
     # Explicit semantic mapping; same-size skip tensors must never be sorted or guessed.
@@ -3400,7 +3437,7 @@ def _dec_entries_from_enc_out(base, enc_out_dir):
     for name, legacy in mapping:
         path, info = resolve_output(enc_out_dir, name, legacy_index=legacy)
         entries.append(named_input(name, path))
-    return entries
+    return entries + _lora_inputs("decoder")
 
 def _read_noise_pred(out_dec_dir, result_idx=0, latent_h=128, latent_w=128):
     return read_float_output(f"{out_dec_dir}/Result_{result_idx}", "noise_pred",

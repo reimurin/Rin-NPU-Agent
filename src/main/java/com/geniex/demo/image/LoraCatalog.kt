@@ -6,7 +6,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-internal data class LoraEntry(val name: String, val bytes: Long, val readable: Boolean, val detail: String)
+internal data class LoraEntry(val name: String, val bytes: Long, val readable: Boolean, val detail: String, val compatible:Boolean=false)
 internal object LoraCatalog {
     fun directory(base: File): File {
         val root = base.canonicalFile
@@ -15,16 +15,16 @@ internal object LoraCatalog {
         require(folder.isDirectory || folder.mkdirs()) { "无法创建 LoRA 目录" }
         return folder
     }
-    fun scan(base: File): List<LoraEntry> {
+    fun scan(base: File, compatibility:LoraCompatibility?=null): List<LoraEntry> {
         val folder = directory(base)
         return folder.listFiles().orEmpty().filter { it.name.endsWith(".safetensors", true) }
             .sortedBy { it.name.lowercase() }.take(300).map { file ->
-                runCatching { inspect(file, folder) }.getOrElse {
+                runCatching { inspect(file, folder, compatibility) }.getOrElse {
                     LoraEntry(file.nameWithoutExtension, file.length(), false, it.message ?: "无法读取")
                 }
             }
     }
-    private fun inspect(file: File, folder: File): LoraEntry {
+    private fun inspect(file: File, folder: File, compatibility:LoraCompatibility?): LoraEntry {
         require(file.isFile && file.canonicalFile.parentFile == folder.canonicalFile) { "不是目录内的普通文件" }
         LoraTags.format(file.nameWithoutExtension)
         val bytes = file.length(); val modified = file.lastModified()
@@ -62,21 +62,19 @@ internal object LoraCatalog {
         var end = 0L
         offsets.sortedBy { it.first }.forEach { (a, b) -> require(a == end) { "张量数据重叠或缺失" }; end = b }
         require(records.isNotEmpty() && end == dataBytes) { "权重载荷长度错误" }
-        val used = mutableSetOf<String>(); var pairs = 0; var maxRank = 0L
+        val used = mutableSetOf<String>(); val mapped=mutableSetOf<String>(); var pairs = 0; var maxRank = 0L
         records.forEach { (name, value) ->
-            val downSuffix = when {
-                name.endsWith(".lora_down.weight") -> ".lora_down.weight"
-                name.endsWith(".lora_A.weight") -> ".lora_A.weight"
-                else -> null
-            }
+            val suffixes=mapOf(".lora_down.weight" to ".lora_up.weight",".lora_A.weight" to ".lora_B.weight",".lora_A.default.weight" to ".lora_B.default.weight",".lora.down.weight" to ".lora.up.weight")
+            val downSuffix=suffixes.keys.firstOrNull { name.endsWith(it) }
             if (downSuffix != null) {
                 val prefix = name.removeSuffix(downSuffix)
-                val upName = prefix + if (downSuffix == ".lora_A.weight") ".lora_B.weight" else ".lora_up.weight"
+                val upName = prefix + suffixes.getValue(downSuffix)
                 val up = records[upName]?.first ?: error("缺少配对权重：$upName")
                 val down = value.first
                 require(down.size in listOf(2, 4) && down.size == up.size && down[0] == up[1]) { "LoRA 秩或矩阵形状不匹配" }
                 require(down[0] <= 256) { "LoRA 秩超出当前测试范围" }
                 if (down.size == 4) require(down.drop(2) == listOf(1L, 1L) && up.drop(2) == listOf(1L, 1L)) { "空间卷积 LoRA 尚待适配" }
+                compatibility?.check(prefix,down,up)?.let { require(mapped.add(it)) { "同一 LoRA 重复映射到一层" } }
                 val alpha = prefix + ".alpha"
                 records[alpha]?.let { require(it.first.fold(1L) { acc, x -> Math.multiplyExact(acc, x) } == 1L); used += alpha }
                 used += name; used += upName; pairs++; maxRank = maxOf(maxRank, down[0])
@@ -84,6 +82,7 @@ internal object LoraCatalog {
         }
         require(pairs > 0 && records.keys.all { it in used }) { "存在尚不支持的 LoRA 类型或额外权重" }
         require(bytes == file.length() && modified == file.lastModified()) { "文件仍在变化，请稍后刷新" }
-        return LoraEntry(file.nameWithoutExtension, bytes, true, "结构已识别 · $pairs 组 / 最大秩 $maxRank\n等待 WAI 可更新底模适配，尚未标记为可生成")
+        val detail="结构已识别 · $pairs 组 / 最大秩 $maxRank\n" + if(compatibility!=null) "层映射兼容；安装组件后进行实机成图验证" else "等待 WAI 可更新底模适配，尚未标记为可生成"
+        return LoraEntry(file.nameWithoutExtension, bytes, true, detail, compatibility!=null)
     }
 }

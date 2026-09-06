@@ -18,8 +18,8 @@ android {
         applicationId 'com.geniex.demo'
         minSdk 31
         targetSdk 34
-        versionCode 19
-        versionName '1.6.0-alpha.2'
+        versionCode 20
+        versionName '1.6.0-alpha.3'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -73,6 +73,7 @@ android {
         unitTests.all {
             maxHeapSize = '2g'
             maxParallelForks = 1
+            systemProperty 'rin.render.dir', System.getenv('RIN_RENDER_DIR') ?: 'D:/CodexDownload/Rin_NPU_Agent/ui-review'
             systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
             systemProperty 'maven.repo.local', 'H:/Rin_Android_NPU_Agent/toolchain/robolectric-maven'
         }
@@ -128,3 +129,6 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
 
+
+// Generated output stays off the nearly-full source drive.
+layout.buildDirectory.set(file("build"))

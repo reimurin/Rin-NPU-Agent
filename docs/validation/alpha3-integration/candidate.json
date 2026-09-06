@@ -1,0 +1,10 @@
+{
+  "version": "1.6.0-alpha.3",
+  "android_tests": 72,
+  "failures": 0,
+  "partition_pipeline_tests": 24,
+  "real_adapter_mapped_layers": 722,
+  "ui_rendering": "Robolectric native Android widgets",
+  "visual_review": "pending",
+  "phone_full_wai_tested": false
+}
