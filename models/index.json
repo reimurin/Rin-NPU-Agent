@@ -52,6 +52,55 @@
           "bytes": 1364938035,
           "sha256": "910eb69b87a04f345dbb3d3be09e8d061d598f470975083857b747dddfee3017"
         }
+      ],
+      "context_patches": [
+        {
+          "id": "clip-g-sm8750-fix1",
+          "target": "context/clip_g.serialized.bin.bin",
+          "bytes": 1402473456,
+          "sha256": "35a2475e62d645abbf8edc1403ac008d508c2c5bbe3028a00a98bb54226fb1bd",
+          "apply_if_sha256": [
+            "604c9dd468ca74553138502d1e32b18129b6671cc91c68f0213403ae769bc2d4"
+          ],
+          "parts": [
+            {
+              "name": "clip_g_sm8750_fix1.bin.part01",
+              "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-clipgfix1/clip_g_sm8750_fix1.bin.part01",
+              "bytes": 268435456,
+              "sha256": "cfb2f2e34e6e000f48862a16b1bc581d0afd85d33922aaab5f3db9e068ee4fad"
+            },
+            {
+              "name": "clip_g_sm8750_fix1.bin.part02",
+              "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-clipgfix1/clip_g_sm8750_fix1.bin.part02",
+              "bytes": 268435456,
+              "sha256": "ca133ed76d3d5f65ac5fa56a442ea15fb0afb444040f47bc0e26ce236233672e"
+            },
+            {
+              "name": "clip_g_sm8750_fix1.bin.part03",
+              "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-clipgfix1/clip_g_sm8750_fix1.bin.part03",
+              "bytes": 268435456,
+              "sha256": "c63cce19196d22737196aac9ae0fcd3067055c955fea7121c5b4477151a7d53f"
+            },
+            {
+              "name": "clip_g_sm8750_fix1.bin.part04",
+              "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-clipgfix1/clip_g_sm8750_fix1.bin.part04",
+              "bytes": 268435456,
+              "sha256": "f1226610e5a65d5cb0935855eb967532f28f292b8082f6eb576509c2a69c42c7"
+            },
+            {
+              "name": "clip_g_sm8750_fix1.bin.part05",
+              "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-clipgfix1/clip_g_sm8750_fix1.bin.part05",
+              "bytes": 268435456,
+              "sha256": "70070fe40eb1d0604a83cdcdc4f18512db64a5bcaae9fad9a1c7b1a0c45192c5"
+            },
+            {
+              "name": "clip_g_sm8750_fix1.bin.part06",
+              "url": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-r1-clipgfix1/clip_g_sm8750_fix1.bin.part06",
+              "bytes": 60296176,
+              "sha256": "985c518b4bd4067bb3b353fa6487e78d4b207e04e81aac328f5494e6daf91cf0"
+            }
+          ]
+        }
       ]
     }
   ]
