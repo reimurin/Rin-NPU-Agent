@@ -21,6 +21,7 @@ import os
 import random
 import re
 import select
+import socket
 import shutil
 import stat
 import struct
@@ -31,6 +32,8 @@ import time
 
 import numpy as np
 from phone_runtime_accel import RuntimeTensorArena, get_runtime_accel
+from rin_tensor_io import (named_input, resolve_output, read_float_output, output_records,
+                           write_input_rows, validate_input_list, prepare_output_dir, validate_output_tree)
 
 # ─── Paths ───
 MODEL_FAMILY_SDXL = "sdxl"
@@ -359,12 +362,19 @@ _preview_thread: threading.Thread | None = None
 SHOW_TEMP = os.environ.get("SDXL_SHOW_TEMP", "0") == "1"
 TEMP_POLL_INTERVAL = max(0.2, float(os.environ.get("SDXL_TEMP_INTERVAL_SEC", "1.0")))
 QNN_LOG_LEVEL = os.environ.get("SDXL_QNN_LOG_LEVEL", "warn")
+QNN_DIAG_DIR = os.environ.get("SDXL_QNN_DIAG_DIR", os.path.join(DR, ".rin_diagnostics")).strip() or os.path.join(DR, ".rin_diagnostics")
 QNN_PROFILING_LEVEL = os.environ.get("SDXL_QNN_PROFILING_LEVEL", "").strip()
 QNN_PROFILE_ARCHIVE = os.environ.get("SDXL_QNN_PROFILE_ARCHIVE", "0") == "1"
 QNN_PROFILE_ARCHIVE_DIR = os.environ.get("SDXL_QNN_PROFILE_ARCHIVE_DIR", os.path.join(WORK_DIR, "qnn_profiles"))
 QNN_PROFILE_VIEWER = os.environ.get("SDXL_QNN_PROFILE_VIEWER", f"{QNN_BIN_DIR}/qnn-profile-viewer").strip()
 QNN_USE_MMAP = os.environ.get("SDXL_QNN_USE_MMAP", "1") == "1"
 QNN_STDOUT_ECHO = os.environ.get("SDXL_QNN_STDOUT_ECHO", "0") == "1"
+QNN_PLATFORM_OPTIONS = os.environ.get("SDXL_QNN_PLATFORM_OPTIONS", "").strip()
+QNN_BRIDGE_PORT = max(0, _env_int(("SDXL_QNN_BRIDGE_PORT",), 0))
+QNN_BRIDGE_REQUIRED = _env_bool(("SDXL_QNN_BRIDGE_REQUIRED",), False)
+QNN_BRIDGE_TIMEOUT_SEC = max(10, _env_int(("SDXL_QNN_BRIDGE_TIMEOUT_SEC",), 180))
+QNN_TRY_SIGNED_PD = _env_bool(("SDXL_QNN_TRY_SIGNED_PD",), True)
+QNN_SIGNED_PD_PLATFORM_OPTIONS = os.environ.get("SDXL_QNN_SIGNED_PD_PLATFORM_OPTIONS", "unsignedPD:OFF").strip() or "unsignedPD:OFF"
 QNN_PERF_PROFILE = os.environ.get("SDXL_QNN_PERF_PROFILE", "burst").strip() or "burst"
 QNN_TRACE_ALL_STEPS = os.environ.get("SDXL_QNN_TRACE_ALL_STEPS", "0") == "1"
 QNN_CONFIG_FILE = os.environ.get("SDXL_QNN_CONFIG_FILE", _detect_default_qnn_config()).strip()
@@ -593,14 +603,24 @@ def _get_qnn_env() -> dict:
         _QNN_ENV.update(os.environ)
         existing_ld = os.environ.get("LD_LIBRARY_PATH", "")
         staged_runtime_lib = os.path.join(WORK_DIR, "runtime", "lib")
-        _QNN_ENV["LD_LIBRARY_PATH"] = (
-            f"{staged_runtime_lib}:{QNN_LIB}:{QNN_BIN_DIR}:{QNN_MODEL_DIR}"
-            + (f":{existing_ld}" if existing_ld else "")
-        )
-        _QNN_ENV["ADSP_LIBRARY_PATH"] = (
-            f"{staged_runtime_lib};{QNN_LIB};/vendor/lib64/rfs/dsp;"
-            f"/vendor/lib/rfsa/adsp;/vendor/dsp"
-        )
+        model_package_lib = os.path.join(DR, "lib")
+        ld_parts = [QNN_LIB, QNN_BIN_DIR, QNN_MODEL_DIR]
+        if os.path.isdir(staged_runtime_lib):
+            ld_parts.append(staged_runtime_lib)
+        ld_parts.extend(part for part in existing_ld.split(":") if part)
+        _QNN_ENV["LD_LIBRARY_PATH"] = ":".join(dict.fromkeys(part for part in ld_parts if part))
+        adsp_parts = [
+            QNN_LIB,
+            "/odm/lib/rfsa/adsp/aiboost/signed",
+            "/odm/lib/rfsa/adsp",
+            "/vendor/lib64/rfs/dsp",
+            "/vendor/lib/rfsa/adsp",
+            "/vendor/dsp",
+        ]
+        if os.path.isdir(staged_runtime_lib):
+            adsp_parts.append(staged_runtime_lib)
+        adsp_parts.append(model_package_lib)
+        _QNN_ENV["ADSP_LIBRARY_PATH"] = ";".join(dict.fromkeys(part for part in adsp_parts if part))
     return _QNN_ENV
 
 
@@ -1135,19 +1155,10 @@ def _start_async_runtime_prep(preview: bool) -> list[threading.Thread]:
 
 
 def _write_input_list_once(path: str, entries: list[str] | tuple[str, ...]) -> None:
-    if os.path.exists(path):
-        return
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(" ".join(entries) + "\n")
-
+    write_input_rows(path, [entries])
 
 def _write_multi_input_list_once(path: str, rows: list[list[str]] | tuple[tuple[str, ...], ...]) -> None:
-    if os.path.exists(path):
-        return
-    with open(path, "w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(" ".join(row) + "\n")
-
+    write_input_rows(path, rows)
 
 def _write_array_reuse(path: str, arr: np.ndarray, dtype=np.float32) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -2005,6 +2016,86 @@ def _shutdown_qnn_server() -> None:
 
 atexit.register(_shutdown_qnn_server)
 
+def _write_qnn_diagnostic(*, stage: str, cmd: list[str], env: dict, returncode: int,
+                          stdout: str, stderr: str, ctx_path: str | None,
+                          backend_lib: str, use_mmap: bool) -> str:
+    try:
+        os.makedirs(QNN_DIAG_DIR, exist_ok=True)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        selected_env = {key: env.get(key, "") for key in (
+            "LD_LIBRARY_PATH", "ADSP_LIBRARY_PATH", "SDXL_QNN_NET_RUN",
+            "SDXL_QNN_LIB_DIR", "SDXL_QNN_SYSTEM_LIB", "MODEL_TO_NPU_BASE",
+            "MODEL_TO_NPU_WORK_DIR", "SDXL_QNN_PLATFORM_OPTIONS",
+            "SDXL_QNN_BRIDGE_PORT", "SDXL_QNN_BRIDGE_REQUIRED",
+            "SDXL_QNN_TRY_SIGNED_PD", "SDXL_QNN_SIGNED_PD_PLATFORM_OPTIONS",
+        )}
+        ctx_info = ""
+        if ctx_path:
+            try:
+                ctx_info = f"exists={os.path.exists(ctx_path)} bytes={os.path.getsize(ctx_path) if os.path.exists(ctx_path) else -1}"
+            except Exception as e:
+                ctx_info = f"stat_error={e}"
+        record = (
+            "=" * 80 + "\n"
+            f"time={timestamp}\n"
+            f"stage={stage}\n"
+            f"returncode={returncode}\n"
+            f"ctx={ctx_path or ''} {ctx_info}\n"
+            f"backend={backend_lib}\n"
+            f"use_mmap={use_mmap}\n"
+            f"cmd={json.dumps(cmd, ensure_ascii=False)}\n"
+            f"env={json.dumps(selected_env, ensure_ascii=False)}\n"
+            "--- stdout ---\n" + (stdout or "<empty>") + "\n"
+            "--- stderr ---\n" + (stderr or "<empty>") + "\n"
+        )
+        latest = os.path.join(QNN_DIAG_DIR, "qnn_last.log")
+        history = os.path.join(QNN_DIAG_DIR, "qnn_history.log")
+        with open(latest, "w", encoding="utf-8") as f:
+            f.write(record)
+        with open(history, "a", encoding="utf-8") as f:
+            f.write(record)
+        return latest
+    except Exception as e:
+        return f"<diag-write-failed:{e}>"
+
+
+def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_dir: str,
+                    native_input: bool, native_output: bool) -> tuple[float, dict]:
+    if QNN_BRIDGE_PORT <= 0:
+        raise RuntimeError("QNN in-process bridge port is not configured")
+    request = {
+        "op": "run",
+        "stage": stage,
+        "context": ctx_path,
+        "input_list": input_list_path,
+        "output_dir": output_dir,
+        "native_input": bool(native_input),
+        "native_output": bool(native_output),
+    }
+    payload = (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
+    with socket.create_connection(("127.0.0.1", QNN_BRIDGE_PORT), timeout=10.0) as sock:
+        sock.settimeout(float(QNN_BRIDGE_TIMEOUT_SEC))
+        sock.sendall(payload)
+        reader = sock.makefile("r", encoding="utf-8", errors="replace")
+        line = reader.readline()
+    if not line:
+        raise RuntimeError("QNN in-process bridge returned an empty response")
+    try:
+        response = json.loads(line)
+    except Exception as e:
+        raise RuntimeError(f"QNN in-process bridge returned invalid JSON: {line[:1000]}") from e
+    if not response.get("ok"):
+        bridge_stage = str(response.get("stage") or "unknown")
+        detail = str(response.get("detail") or "native QNN failure")
+        errors = [line for line in str(response.get("native_log") or "").splitlines()
+                  if "[ERROR]" in line or "RIN_INPUT_ERROR" in line or "RIN_OUTPUT_ERROR" in line]
+        if errors:
+            detail += " | " + " | ".join(errors[-5:])[-1800:]
+        raise RuntimeError(f"in-process QNN bridge stage={bridge_stage} failed: {detail}")
+    elapsed = float(response.get("elapsed_ms") or 0.0)
+    return elapsed, response
+
+
 def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
             native_input=False, backend=None, model_path=None, config_file=None,
             use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None):
@@ -2022,6 +2113,51 @@ def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
     effective_mmap = QNN_USE_MMAP if use_mmap is None else use_mmap
     effective_perf = perf_profile or QNN_PERF_PROFILE
     runner_path = _resolve_exec_binary(net_run_path or QNN_NET_RUN)
+    stage = profile_tag or (os.path.basename(effective_ctx_path) if effective_ctx_path else "model")
+
+    if (
+        effective_ctx_path is not None
+        and model_path is None
+        and _is_htp_backend(backend_lib)
+        and QNN_BRIDGE_PORT > 0
+    ):
+        os.makedirs(output_dir, exist_ok=True)
+        env = _get_qnn_env()
+        _log(f"[QNN BRIDGE START] stage={stage} port={QNN_BRIDGE_PORT} ctx={effective_ctx_path}")
+        try:
+            result_count = validate_input_list(input_list_path, native_input=native_input)
+            prepare_output_dir(output_dir, WORK_DIR)
+            bridge_ms, bridge_response = _qnn_bridge_run(
+                stage=stage,
+                ctx_path=effective_ctx_path,
+                input_list_path=input_list_path,
+                output_dir=output_dir,
+                native_input=native_input,
+                native_output=native,
+            )
+            output_count = validate_output_tree(output_dir, result_count)
+            _log(f"[QNN OUTPUT OK] stage={stage} results={result_count} tensors={output_count}")
+        except Exception as e:
+            diag_path = _write_qnn_diagnostic(
+                stage=stage + "_inprocess",
+                cmd=["inprocess-jni-bridge", effective_ctx_path, input_list_path, output_dir],
+                env=env,
+                returncode=90,
+                stdout="",
+                stderr=str(e),
+                ctx_path=effective_ctx_path,
+                backend_lib=backend_lib,
+                use_mmap=bool(effective_mmap),
+            )
+            raise RuntimeError(f"QNN in-process bridge stage={stage} failed: {e}; log={diag_path}") from e
+        _log(
+            f"[QNN BRIDGE OK] stage={stage} {bridge_ms:.0f}ms "
+            f"nativeStage={bridge_response.get('stage','?')} backend={bridge_response.get('backend_build','')}"
+        )
+        return bridge_ms
+
+    if QNN_BRIDGE_REQUIRED and effective_ctx_path is not None and _is_htp_backend(backend_lib):
+        raise RuntimeError("QNN in-process bridge is required but unavailable")
 
     # --- Try multi-context server first (single persistent process) ---
     if (
@@ -2080,23 +2216,78 @@ def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
         cmd.append("--use_native_input_files")
     if native:
         cmd.append("--use_native_output_files")
+    if QNN_PLATFORM_OPTIONS:
+        cmd.extend(["--platform_options", QNN_PLATFORM_OPTIONS])
+    stage = profile_tag or (os.path.basename(effective_ctx_path) if effective_ctx_path else "model")
+    env = _get_qnn_env()
+    _log(f"[QNN START] stage={stage} runner={runner_path} backend={backend_lib} ctx={effective_ctx_path or model_path} mmap={effective_mmap}")
+    _log(f"[QNN ENV] LD={env.get('LD_LIBRARY_PATH','')} ADSP={env.get('ADSP_LIBRARY_PATH','')}")
     t0 = time.time()
-    stdout_target = subprocess.PIPE if QNN_STDOUT_ECHO else subprocess.DEVNULL
     result = subprocess.run(
         cmd,
-        env=_get_qnn_env(),
+        env=env,
         cwd=DR,
-        stdout=stdout_target,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         timeout=120,
     )
     elapsed = (time.time() - t0) * 1000
-    if result.returncode != 0:
-        print(f"  [qnn-net-run ERROR] {result.stderr[-500:]}", file=sys.stderr)
-        raise RuntimeError(f"qnn-net-run failed: exit {result.returncode}")
-    if QNN_STDOUT_ECHO and result.stdout and result.stdout.strip():
+    diag_path = _write_qnn_diagnostic(
+        stage=stage, cmd=cmd, env=env, returncode=result.returncode,
+        stdout=result.stdout or "", stderr=result.stderr or "",
+        ctx_path=effective_ctx_path, backend_lib=backend_lib, use_mmap=bool(effective_mmap),
+    )
+    retry_note = ""
+    if (
+        result.returncode != 0
+        and QNN_TRY_SIGNED_PD
+        and not QNN_PLATFORM_OPTIONS
+        and "Device Creation failure" in ((result.stderr or "") + "\n" + (result.stdout or ""))
+    ):
+        first_result = result
+        signed_cmd = list(cmd) + ["--platform_options", QNN_SIGNED_PD_PLATFORM_OPTIONS]
+        signed_env = dict(env)
+        signed_adsp = [
+            "/odm/lib/rfsa/adsp/aiboost/signed",
+            "/odm/lib/rfsa/adsp",
+            "/vendor/lib64/rfs/dsp",
+            "/vendor/lib/rfsa/adsp",
+            "/vendor/dsp",
+            QNN_LIB,
+            os.path.join(DR, "lib"),
+        ]
+        signed_env["ADSP_LIBRARY_PATH"] = ";".join(dict.fromkeys(x for x in signed_adsp if x))
+        _log(f"[QNN RETRY] stage={stage} retrying signed-PD with --platform_options {QNN_SIGNED_PD_PLATFORM_OPTIONS}")
+        signed_result = subprocess.run(
+            signed_cmd, env=signed_env, cwd=DR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120,
+        )
+        signed_diag = _write_qnn_diagnostic(
+            stage=stage + "_signedpd", cmd=signed_cmd, env=signed_env, returncode=signed_result.returncode,
+            stdout=signed_result.stdout or "", stderr=signed_result.stderr or "",
+            ctx_path=effective_ctx_path, backend_lib=backend_lib, use_mmap=bool(effective_mmap),
+        )
+        if signed_result.returncode == 0:
+            _log(f"[QNN RETRY] stage={stage} signed-PD succeeded")
+            result, cmd, env, diag_path = signed_result, signed_cmd, signed_env, signed_diag
+        else:
+            retry_note = (
+                f"; signed-PD retry exit {signed_result.returncode}: "
+                + " | ".join(x for x in ((signed_result.stderr or "") + "\n" + (signed_result.stdout or "")).splitlines() if x.strip())[-2500:]
+                + f"; signed-log={signed_diag}; unsigned-exit={first_result.returncode}"
+            )
+            result, cmd, env, diag_path = signed_result, signed_cmd, signed_env, signed_diag
+    if result.stdout and result.stdout.strip():
         _log(result.stdout.rstrip())
+    if result.stderr and result.stderr.strip():
+        for _line in result.stderr.rstrip().splitlines():
+            _log(f"[QNN STDERR] {_line}")
+    if result.returncode != 0:
+        combined = "\n".join(line for line in ((result.stderr or "") + "\n" + (result.stdout or "")).splitlines() if line.strip())
+        compact = " | ".join(combined.splitlines()[-30:])
+        if len(compact) > 5000:
+            compact = compact[-5000:]
+        raise RuntimeError(f"qnn-net-run stage={stage} failed: exit {result.returncode}; {compact or 'no qnn output'}{retry_note}; log={diag_path}")
     if QNN_PROFILING_LEVEL:
         prof_info = _archive_qnn_profile(output_dir, profile_tag)
         if prof_info is not None:
@@ -2717,7 +2908,7 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     if QNN_CONFIG_FILE:
         _log("  [QNN] backend-extension config is requested; runtime uses server-side perf controls for active execution path")
     else:
-        _log("  [QNN] backend-extension fast path is off; current rebuilt-phone full runs are expected in the ~75–78s class")
+        _log("  [QNN] backend-extension fast path is off; full-generation timing is measured on the current device")
     if use_cfg:
         _log(f"Neg:    {neg_prompt[:80]}{'...' if len(neg_prompt) > 80 else ''}")
     _log(f"Resolution: {width}x{height}  (latent {latent_w}x{latent_h})")
@@ -2773,9 +2964,9 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
         ms_l = qnn_run(CONTEXTS["clip_l"], f"{cd}/il_l.txt", f"{cd}/out_l", profile_tag=f"clip_{tag}_l")
         ms_g = qnn_run(CONTEXTS["clip_g"], f"{cd}/il_g.txt", f"{cd}/out_g", profile_tag=f"clip_{tag}_g")
 
-        cl = np.fromfile(f"{cd}/out_l/Result_0/penultimate_hidden.raw", np.float32).reshape(1, 77, 768)
-        cg = np.fromfile(f"{cd}/out_g/Result_0/penultimate_hidden.raw", np.float32).reshape(1, 77, 1280)
-        te = np.fromfile(f"{cd}/out_g/Result_0/text_embeds.raw", np.float32).reshape(1, 1280)
+        cl = read_float_output(f"{cd}/out_l/Result_0", "penultimate_hidden", (1, 77, 768), legacy_index=0)
+        cg = read_float_output(f"{cd}/out_g/Result_0", "penultimate_hidden", (1, 77, 1280), legacy_index=0)
+        te = read_float_output(f"{cd}/out_g/Result_0", "text_embeds", (1, 1280), legacy_index=1)
 
         pe = np.concatenate([cl, cg], axis=-1)  # [1, 77, 2048]
         _save_clip_cache(text, pe, te)
@@ -2783,6 +2974,7 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
 
     pe_uncond = None
     te_uncond = None
+    _log("[CLIP START]")
     pe_cond, te_cond, ms_l, ms_g, clip_cond_cached = run_clip(prompt, "cond")
     cond_suffix = " (cache)" if clip_cond_cached else ""
     _log(f"[CLIP cond{cond_suffix}] L={ms_l:.0f}ms G={ms_g:.0f}ms")
@@ -2843,9 +3035,10 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
 
     cfg_cutoff = ((steps + 1) // 2) if (use_cfg and progressive_cfg) else steps
     if progressive_cfg and use_cfg:
-        _log(f"  [Progressive CFG] CFG on steps 1..{cfg_cutoff}, uncond-only after")
+        _log(f"  [Progressive CFG] CFG on steps 1..{cfg_cutoff}, cond-only after")
 
     for si in range(steps):
+        _log(f"[UNet START {si+1}/{steps}]")
         t = sched.timesteps[si]
         sigma = float(sched.sigmas[si])
         sigma_next = float(sched.sigmas[si + 1])
@@ -2914,19 +3107,13 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
 
     vd = f"{WORK_DIR}/vae"
     os.makedirs(vd, exist_ok=True)
-    # VAE expects NHWC
-    lat_nhwc = tensor_arena.vae_input(latents, scaling_factor) if tensor_arena is not None else np.transpose(latents / scaling_factor, (0, 2, 3, 1)).astype(np.float32)
-    lat_nhwc.tofile(f"{vd}/lat.raw")
-    _write_input_list_once(f"{vd}/il.txt", [f"{vd}/lat.raw"])
-
-    ms_vae = qnn_run(CONTEXTS["vae"], f"{vd}/il.txt", f"{vd}/out", native=True, profile_tag="vae_final")
+    _log("[VAE START]")
+    _prepare_vae_input(latents, scaling_factor).tofile(f"{vd}/lat.raw")
+    _write_input_list_once(f"{vd}/il.txt", [named_input("latent", f"{vd}/lat.raw")])
+    # JNI converts model FP16 output to a documented FLOAT_ONLY file.
+    ms_vae = qnn_run(CONTEXTS["vae"], f"{vd}/il.txt", f"{vd}/out", native=False, profile_tag="vae_final")
     _log(f"[VAE] {ms_vae:.0f}ms")
-
-    raw = np.fromfile(f"{vd}/out/Result_0/image.raw", np.float32)
-    expected = height * width * 3
-    if raw.size != expected:
-        raise ValueError(f"VAE output: expected {expected} elements ({height}x{width}x3), got {raw.size}")
-    img = raw.reshape(height, width, 3)
+    img = _read_vae_image(f"{vd}/out", height, width)
     img = np.clip(img / 2 + 0.5, 0, 1)
 
     if stretch:
@@ -3079,6 +3266,8 @@ def _read_taesd_qnn_output(out_dir: str, image_h: int = 1024, image_w: int = 102
     if not os.path.isdir(result_dir):
         raise FileNotFoundError(f"TAESD QNN output dir missing: {result_dir}")
 
+    if output_records(result_dir) is not None:
+        return read_float_output(result_dir, "image", (1, image_h, image_w, 3), allow_native=True)
     native_path = os.path.join(result_dir, "image_native.raw")
     native_meta_path = os.path.join(out_dir, "image_native.raw.json")
     if os.path.exists(native_path):
@@ -3197,45 +3386,41 @@ def _ensure_unet_workdirs(use_cfg):
 
 
 def _enc_dec_inputs(base, smp_path, ts_path):
-    """Return (enc_entries, dec_entries_builder) for one condition."""
-    enc = [
-        f"{base}/enc.raw",   # [0] encoder_hidden_states
-        ts_path,              # [1] timestep
-        f"{base}/tid.raw",   # [2] time_ids
-        f"{base}/te.raw",    # [3] text_embeds
-        smp_path,             # [4] sample
-    ]
-    return enc
-
+    return [named_input("encoder_hidden_states", f"{base}/enc.raw"),
+            named_input("timestep", ts_path), named_input("time_ids", f"{base}/tid.raw"),
+            named_input("text_embeds", f"{base}/te.raw"), named_input("sample", smp_path)]
 
 def _dec_entries_from_enc_out(base, enc_out_dir):
-    """Build decoder input list from encoder output directory."""
-    dec = [
-        f"{base}/enc.raw",               # [0] encoder_hidden_states
-        f"{enc_out_dir}/output_0.raw",    # [1] mid_out
-        f"{enc_out_dir}/output_9.raw",    # [2] skip_8
-        f"{enc_out_dir}/output_10.raw",   # [3] temb
-    ]
-    for i in range(8, 0, -1):
-        dec.append(f"{enc_out_dir}/output_{i}.raw")  # skip_7→skip_0
-    return dec
-
+    # Explicit semantic mapping; same-size skip tensors must never be sorted or guessed.
+    mapping = [("mid_out", 0), ("skip_8", 9), ("temb", 10)] + [(f"skip_{i}", i + 1) for i in range(7, -1, -1)]
+    entries = [named_input("encoder_hidden_states", f"{base}/enc.raw")]
+    for name, legacy in mapping:
+        path, info = resolve_output(enc_out_dir, name, legacy_index=legacy)
+        entries.append(named_input(name, path))
+    return entries
 
 def _read_noise_pred(out_dec_dir, result_idx=0, latent_h=128, latent_w=128):
-    """Read decoder noise_pred output (auto-detect float32/float16)."""
-    out_path = f"{out_dec_dir}/Result_{result_idx}/output_0.raw"
-    raw_bytes = os.path.getsize(out_path)
-    n_latent = 1 * 4 * latent_h * latent_w
-    expected_f32 = n_latent * 4
-    expected_f16 = n_latent * 2
-    if raw_bytes == expected_f32:
-        d = np.fromfile(out_path, np.float32)
-    elif raw_bytes == expected_f16:
-        d = np.fromfile(out_path, np.float16).astype(np.float32)
-    else:
-        raise ValueError(f"Decoder output: unexpected {raw_bytes} bytes at {out_path}")
-    return d.reshape(1, 4, latent_h, latent_w)
+    return read_float_output(f"{out_dec_dir}/Result_{result_idx}", "noise_pred",
+                             (1, 4, latent_h, latent_w), legacy_index=0, allow_native=True)
 
+
+def _prepare_vae_input(latents, scaling_factor):
+    # Official QAIRT metadata: latent [N,4,H,W], not NHWC.
+    if latents.ndim != 4 or latents.shape[1] != 4 or scaling_factor <= 0:
+        raise ValueError("Invalid VAE NCHW latent or scaling factor")
+    result = np.ascontiguousarray(latents / scaling_factor, dtype=np.float32)
+    if not np.isfinite(result).all():
+        raise ValueError("VAE latent contains non-finite values")
+    return result
+
+
+def _read_vae_image(out_dir, height, width):
+    result_dir = f"{out_dir}/Result_0"
+    if output_records(result_dir) is not None:
+        return read_float_output(result_dir, "image", (1, height, width, 3), allow_native=True)[0]
+    # This runtime's compiled VAE is NCHW even for a standalone runner.
+    image = read_float_output(result_dir, "image", (1, 3, height, width), allow_native=True)
+    return np.ascontiguousarray(image.transpose(0, 2, 3, 1))[0]
 
 def _run_unet_split(latent_np, timestep, step_idx, tag, *, timestep_arr: np.ndarray | None = None, latent_h: int = 128, latent_w: int = 128):
     """Run split UNet (encoder + decoder) on NPU — single condition."""
@@ -3323,17 +3508,17 @@ def _run_unet_split_cfg(latent_np, timestep, cond_base, uncond_base, step_idx, *
 
             # Encoder→Decoder piping mappings
             mappings = [
-                "output_0:mid_out",
-                "output_1:skip_0",
-                "output_2:skip_1",
-                "output_3:skip_2",
-                "output_4:skip_3",
-                "output_5:skip_4",
-                "output_6:skip_5",
-                "output_7:skip_6",
-                "output_8:skip_7",
-                "output_9:skip_8",
-                "output_10:temb",
+                "mid_out:mid_out",
+                "skip_0:skip_0",
+                "skip_1:skip_1",
+                "skip_2:skip_2",
+                "skip_3:skip_3",
+                "skip_4:skip_4",
+                "skip_5:skip_5",
+                "skip_6:skip_6",
+                "skip_7:skip_7",
+                "skip_8:skip_8",
+                "temb:temb",
             ]
 
             _t_pre = time.time()

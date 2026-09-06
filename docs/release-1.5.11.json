@@ -1,0 +1,16 @@
+{
+  "version": "1.5.11",
+  "versionCode": 17,
+  "apk": "Rin-NPU-Agent-v1.5.11-debug-runtime-ready.apk",
+  "bytes": 128669971,
+  "sha256": "df109da42a8c135cc09b04332890afae999d2fcd8f7f13ab9f07b0dc8af1bcd1",
+  "apk_build_type": "debug",
+  "promoted_without_rebuild": true,
+  "device_validation": {
+    "device": "Honor Magic 7 Pro / SM8750",
+    "evidence": "user-confirmed successful generation",
+    "date": "2026-09-06"
+  },
+  "model_release": "wai-sm8750-r1-test",
+  "model_repair_release": "wai-sm8750-r1-clipgfix1"
+}

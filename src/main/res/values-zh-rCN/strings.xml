@@ -234,4 +234,16 @@
     <string name="image_runtime_install_extracting">正在安装生图运行环境…</string>
     <string name="image_runtime_install_complete">生图运行环境 %1$s 安装完成</string>
     <string name="image_runtime_install_failed">生图环境配置失败：%1$s</string>
+
+    <string name="runtime_download_mode_title">选择生图环境下载方式</string>
+    <string name="runtime_download_mode_app">App 加速下载 · 8线程 · 支持断点续传</string>
+    <string name="runtime_download_mode_browser">浏览器下载 · 使用系统默认浏览器</string>
+    <string name="runtime_browser_choose_download_folder">首次使用请授权系统 Download 文件夹，Rin 将自动检测浏览器下载的分卷。</string>
+    <string name="runtime_browser_opened">已打开浏览器。请下载 part01～part04，完成后返回 Rin。</string>
+    <string name="runtime_browser_scanning">正在扫描浏览器下载文件…</string>
+    <string name="runtime_browser_waiting">浏览器下载 · 已就绪 %1$d/%2$d 个分卷 · %3$s/%4$s。下载完成后返回 Rin 即可自动校验。</string>
+    <string name="image_runtime_install_downloading_detail">分卷 %1$d/%2$d · %3$s/%4$s · %5$s · 剩余 %6$s · %7$d线程</string>
+    <string name="runtime_download_notification_channel">生图运行环境下载</string>
+    <string name="runtime_download_notification_channel_desc">本地生图运行环境的后台下载与安装进度</string>
+    <string name="runtime_download_notification_title">Rin 生图运行环境</string>
 </resources>

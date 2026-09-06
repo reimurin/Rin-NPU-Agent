@@ -1,0 +1,497 @@
+{
+  "schema": 1,
+  "version": "1.5.11",
+  "versionCode": 17,
+  "base_commit": "9b7b34e2a33c22a3cff61af1963c4bfa482da919",
+  "source_files": [
+    {
+      "path": "src/main/AndroidManifest.xml",
+      "sha256": "57f5e0f6ca0cdadb5c711f42cd22ede7591757102f4bf5c865d0b9893ccba1d6"
+    },
+    {
+      "path": "src/release/java/com/geniex/demo/model/TestModelSeeder.kt",
+      "sha256": "99f7e69afae4edef9eed057a8fcb3eb0bbf03166f86f06e6f8e212be93de0c93"
+    },
+    {
+      "path": "src/main/assets/model_list.json",
+      "sha256": "54b9d6d6b1ea3701d87e5ce270aee891c6992b79482f233950b59a630483fa9e"
+    },
+    {
+      "path": "src/main/res/color/btn_enable_color.xml",
+      "sha256": "75f0f7c9d59fed1b0a5b6b96856eeb3352f49a16ed526ea8402ec3cdde08c261"
+    },
+    {
+      "path": "src/main/res/color/rin_button_primary.xml",
+      "sha256": "510712d43b8bd8151a0a85485f6878fe11f2257eba5e1eab435a323fdf262edf"
+    },
+    {
+      "path": "src/main/res/color/rin_button_secondary.xml",
+      "sha256": "d1829fa691ece25a4275f607a9f6314bc030aa6297501e1507736c579a40b62f"
+    },
+    {
+      "path": "src/main/res/color/rin_textinput_stroke.xml",
+      "sha256": "bb19eb96122adf8fcd3a66e1cd3f8bba403825122d5489c6ec7ca57da44ecbfc"
+    },
+    {
+      "path": "src/main/res/drawable/bg_ai_message.xml",
+      "sha256": "2eab8a0e9fd0a46fedcda07ba0020dbed784f23431f6cb02a941df981fd25766"
+    },
+    {
+      "path": "src/main/res/drawable/bg_audio_background.xml",
+      "sha256": "781a044c3e51acb2752231fec7b1da72f3959c5380a2f8bb70eac657a776826f"
+    },
+    {
+      "path": "src/main/res/drawable/bg_input_box_background.xml",
+      "sha256": "29638181767e692f925fe19afaec6eeaba74225d2f11858482b8cb18f6d12dd5"
+    },
+    {
+      "path": "src/main/res/drawable/bg_send_circle.xml",
+      "sha256": "39242f57282a532c6be0c3c092a5aef66ec7948190fb46d08b4630da147826a3"
+    },
+    {
+      "path": "src/main/res/drawable/bg_user_message.xml",
+      "sha256": "59ce7216c7e95843d90206a7cfb8358357252765757e8584cdcaf97ab312efb3"
+    },
+    {
+      "path": "src/main/res/drawable/btn_rounded_black_bg_18.xml",
+      "sha256": "9a9d5aefe31ea96d0d026556aa3b793c4f257d66252d3d2c14f3b7b5437fbde6"
+    },
+    {
+      "path": "src/main/res/drawable/btn_rounded_border.xml",
+      "sha256": "fea1c66bc7e893b6c04dc9364115999744c8e91adae1bc76625702838bbaa0aa"
+    },
+    {
+      "path": "src/main/res/drawable/btn_rounded_border_18.xml",
+      "sha256": "17d38c386cfd256d2283d24af2963ed5c9a055793e3b54c491a7746fb8e05e5b"
+    },
+    {
+      "path": "src/main/res/drawable/btn_rounded_border_gray.xml",
+      "sha256": "1ccaf6ae9964ae98e552abbd63022a9b70b6cfaf17428a94871c598535f7acad"
+    },
+    {
+      "path": "src/main/res/drawable/icon_back.xml",
+      "sha256": "aafc3b7dfaf90e4169381e4e460ad76a644f866a195d24715f3256140f0f5068"
+    },
+    {
+      "path": "src/main/res/drawable/icon_close.xml",
+      "sha256": "59294cfa970f27d654a8632ec485c232536357928d559db4ccda250eecbee7c9"
+    },
+    {
+      "path": "src/main/res/drawable/icon_database.xml",
+      "sha256": "ba8591792cc161097adfe59a65bc29d38fa071db85fa3167f456abee9f7e1989"
+    },
+    {
+      "path": "src/main/res/drawable/icon_file.xml",
+      "sha256": "990fd3c46aae9b683a4af25fb5fd99435c34cdfd073f760aaa41bb004ac7b673"
+    },
+    {
+      "path": "src/main/res/drawable/ic_add_image_24.xml",
+      "sha256": "2b8f45982af78f166d81ecae9486fdf3c8d9894eb4021c6e20ae224fa9677ac3"
+    },
+    {
+      "path": "src/main/res/drawable/ic_chat_mode_24.xml",
+      "sha256": "33a67ef8c4365303ea4ace5f7e5ca4a6f9875d656113b6d56de96a50a270cd82"
+    },
+    {
+      "path": "src/main/res/drawable/ic_chevron_down_24.xml",
+      "sha256": "c822df942d22b12ae6785e03d2dfd49b54afb6c674c4d8ff078578f3403ebbdc"
+    },
+    {
+      "path": "src/main/res/drawable/ic_close_24.xml",
+      "sha256": "016135434cdf804029ab0435e239aae29234f926bd34310f133d989a643d01a9"
+    },
+    {
+      "path": "src/main/res/drawable/ic_image_mode_24.xml",
+      "sha256": "6a7ae19907134f7c3241108d8f3b1d604c6ccfd8ddf8489d020a784f7c2793f6"
+    },
+    {
+      "path": "src/main/res/drawable/ic_launcher_background.xml",
+      "sha256": "f0b02ade22ddecf8f87dd6ff6b8b755496f9e0a4af48a831b065c7a8ad884420"
+    },
+    {
+      "path": "src/main/res/drawable/ic_launcher_foreground.xml",
+      "sha256": "b27d486b9529d35fe31bda300ab1c2323407e848e88f7a713e105f6fd2c7d7ef"
+    },
+    {
+      "path": "src/main/res/drawable/ic_magic_24.xml",
+      "sha256": "61ce666ee9be9a0c57ace5e6ba4803d189f4a78bea975893c30f0c21e5559895"
+    },
+    {
+      "path": "src/main/res/drawable/ic_menu_24.xml",
+      "sha256": "f33d75f17031b94de54ca3881a3217df00d5f2e2898ba0380f872b96fee749f9"
+    },
+    {
+      "path": "src/main/res/drawable/ic_save_24.xml",
+      "sha256": "9d76b7e27b25b94812c0cd6296850f0af35e9eab0497bfcb962ae82c0f0b8c8e"
+    },
+    {
+      "path": "src/main/res/drawable/ic_send_24.xml",
+      "sha256": "ad4c2b627f57beaf1f9df78e1685f47060ccf32d100a89af10ad761531815f7f"
+    },
+    {
+      "path": "src/main/res/drawable/rin_bg_control.xml",
+      "sha256": "50929ad833a979a14ff246393db6f4357c12926f9a7758b5ad55d28040a86fc7"
+    },
+    {
+      "path": "src/main/res/drawable/rin_bg_icon_button.xml",
+      "sha256": "38a85a55015af5155616bbd664ed7a70544a4871baaecac65bdc086ea26345ec"
+    },
+    {
+      "path": "src/main/res/drawable/rin_bg_mode_selected.xml",
+      "sha256": "7acb0b264cb115189efec89ae6cb650af432685f110ccfe5237deccbb3bcf817"
+    },
+    {
+      "path": "src/main/res/drawable/rin_bg_mode_unselected.xml",
+      "sha256": "9b599dc2ac53f269b5e6a1db1c54dc66618b4766cbc7c2f46ef0c8ac23b64bd5"
+    },
+    {
+      "path": "src/main/res/drawable/rin_bg_preview.xml",
+      "sha256": "4e598b21196eccbdbf71222eb7b2f1463352a7f4bcd8b8697cffa415ec5994c5"
+    },
+    {
+      "path": "src/main/res/drawable/rin_bg_remove_chip.xml",
+      "sha256": "0a42e461f317bc413a80c1df6aaa532481b04783469c1e141fe4cf8ca5e35d83"
+    },
+    {
+      "path": "src/main/res/layout/activity_file_content.xml",
+      "sha256": "9a9bc96b253f76b92c9ef4baf4072b7adf5edd66e83b49ab35b63d47be56a330"
+    },
+    {
+      "path": "src/main/res/layout/activity_main.xml",
+      "sha256": "9f73be3ff7212d7fcbaee3ce9b4f694a5046e53d9e0954f769ae666c69b802d2"
+    },
+    {
+      "path": "src/main/res/layout/activity_model_library.xml",
+      "sha256": "912dd5582f4df8d299c18f8f485949b984e8cf74729cb01aedd7296a13525d0f"
+    },
+    {
+      "path": "src/main/res/layout/dialog_select_plugin_id.xml",
+      "sha256": "4d9f1b0d03f259225b6f95af38b9e5353305959116fe3483a765e9a24c53ae23"
+    },
+    {
+      "path": "src/main/res/layout/item_ai_message.xml",
+      "sha256": "574d9448149bc8d5c81e6aa27e703adaa83aa7c64baa4bb2dc86c5659f3fef25"
+    },
+    {
+      "path": "src/main/res/layout/item_assistant_image_message.xml",
+      "sha256": "1e60d608574109d41e0fba926fd9f4eeaa0f5a3cacee7c8cb265eb79a79aebfa"
+    },
+    {
+      "path": "src/main/res/layout/item_image_item_message.xml",
+      "sha256": "963e9071109073ed8775334e4b03fb1a81acdb3f6d98a92a2f5d8ff1215db964"
+    },
+    {
+      "path": "src/main/res/layout/item_image_message.xml",
+      "sha256": "0ffaa6f483cd89e6df4e705758f4b7e86d0980d22c644889b496dbc2cfc1c81b"
+    },
+    {
+      "path": "src/main/res/layout/item_image_scroll.xml",
+      "sha256": "9adc4b0424ed743cf7feaaebdfc594a47915f9f79568a7fa1835d189f9f9639e"
+    },
+    {
+      "path": "src/main/res/layout/item_loading_message.xml",
+      "sha256": "b1d793c74be3a46fc6780bee18ce8fb329f4ae9110592b85a2fbfb6c1c929b9b"
+    },
+    {
+      "path": "src/main/res/layout/item_model.xml",
+      "sha256": "2b2c8c43d788535b8a891ad0c0772a385784a6f4dd94b0262924635216e62ddd"
+    },
+    {
+      "path": "src/main/res/layout/item_profile_message.xml",
+      "sha256": "861e2a5de9e33ec302c8d68f65c38a64d56bb699f067efb1582731bbf21af77d"
+    },
+    {
+      "path": "src/main/res/layout/item_user_message.xml",
+      "sha256": "67c2fbd71d1da3a0b3bf3b45113ef33fb343c0f2eb56f17f6385fbd7667f82e7"
+    },
+    {
+      "path": "src/main/res/layout/menu_layout.xml",
+      "sha256": "ede45e35db122a6b55b6d3beee23b1de2a8adbb9c41d85a4c08f61eb9b6639ae"
+    },
+    {
+      "path": "src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "sha256": "81927c8477f888dcc48c966ed13efcf71428d7709280e32135a516b7a156dd50"
+    },
+    {
+      "path": "src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "sha256": "81927c8477f888dcc48c966ed13efcf71428d7709280e32135a516b7a156dd50"
+    },
+    {
+      "path": "src/main/res/mipmap-hdpi/ic_launcher.webp",
+      "sha256": "ece5b34a4ecc7d06d1c5fbda6ed8797dcdb9dcc7c0c5ab38e53b1b4fddb3cbc4"
+    },
+    {
+      "path": "src/main/res/mipmap-hdpi/ic_launcher_foreground.webp",
+      "sha256": "699d534f16e41d5e274a338608cad5c4035fd5f363715f0caf9f62b126f85099"
+    },
+    {
+      "path": "src/main/res/mipmap-hdpi/ic_launcher_round.webp",
+      "sha256": "f62a5581e1d60586078eb09855974af26f30576d08b27235c9055211cc6a5ae2"
+    },
+    {
+      "path": "src/main/res/mipmap-mdpi/ic_launcher.webp",
+      "sha256": "9a089cd599351e924fc5268be0e2b608fe8fa96b666bb8182d6046c1a8a08269"
+    },
+    {
+      "path": "src/main/res/mipmap-mdpi/ic_launcher_foreground.webp",
+      "sha256": "8ee828b0a964b0ca11fa5366bc4ae2bad93f0c3aad188ca97d27f16925333496"
+    },
+    {
+      "path": "src/main/res/mipmap-mdpi/ic_launcher_round.webp",
+      "sha256": "a99d36d75bb6b59278b7f26ce39212dcd2d07fb09e896e33bc1be871338ef041"
+    },
+    {
+      "path": "src/main/res/mipmap-xhdpi/ic_launcher.webp",
+      "sha256": "6719ce33caba3a038d8a645ee9aafa1e2d0c0494b10268590ee12d3c736bb063"
+    },
+    {
+      "path": "src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp",
+      "sha256": "4cc0c2ea12cd4d7d8b2fb7bb73e40569b6b4b1b36f13cd1003dd4cba249283bd"
+    },
+    {
+      "path": "src/main/res/mipmap-xhdpi/ic_launcher_round.webp",
+      "sha256": "5062450724f03cf010c2e602594a52d2113242f61cb1845277cedc8e10700a45"
+    },
+    {
+      "path": "src/main/res/mipmap-xxhdpi/ic_launcher.webp",
+      "sha256": "8686bd6a20e8029389322b3a16462f1e155cc8d227ee6545062b1358d8aafc79"
+    },
+    {
+      "path": "src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp",
+      "sha256": "6bbaf2ad6bb92c4e532524ae3587edf515e96a71ee629e143ed8223de561d868"
+    },
+    {
+      "path": "src/main/res/mipmap-xxhdpi/ic_launcher_round.webp",
+      "sha256": "a26cf950f4205777308bc8fa8cc90987824ed9d7d60c98de46604ef2561887a1"
+    },
+    {
+      "path": "src/main/res/mipmap-xxxhdpi/ic_launcher.webp",
+      "sha256": "2ed0b0cf1b164a5eed07c2f690a788d1ad9a707fb4d69e1842599e5066728ea4"
+    },
+    {
+      "path": "src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp",
+      "sha256": "64cee2e38fe662595bd20c3ce8e80d7c4440b1188843198229f6347547f5c6a6"
+    },
+    {
+      "path": "src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp",
+      "sha256": "25f22ca225032352b9957b2c57ba0690cba0c9e3b5fe60c8bcdda85a9bf9d5cd"
+    },
+    {
+      "path": "src/main/res/values/colors.xml",
+      "sha256": "2071c233eec32ca7c251e8ac13e58767f7b786464de607f3a77090fa7542de73"
+    },
+    {
+      "path": "src/main/res/values/dimens.xml",
+      "sha256": "92806d7eb6a333865c25f71b33682fd732f208ac6c9180946ac180fbf7ef6c4b"
+    },
+    {
+      "path": "src/main/res/values/strings.xml",
+      "sha256": "12b4808e409abacb4624aa5b013ede4cd0d66c6ec90763a398ae965774094e60"
+    },
+    {
+      "path": "src/main/res/values/styles.xml",
+      "sha256": "09098088a40a63440e1ed54c84a0797eabba823818e8417fe65431974082c6ec"
+    },
+    {
+      "path": "src/main/res/values/themes.xml",
+      "sha256": "c897854148d63662ef444aa44a42784a7461e931bc2be4f8492824cde5617dd3"
+    },
+    {
+      "path": "src/main/res/values-zh-rCN/strings.xml",
+      "sha256": "9761c21bc55fcfdd5be9bb74712c769d741ba3fd14677d619919d24770c569d4"
+    },
+    {
+      "path": "src/main/res/xml/backup_rules.xml",
+      "sha256": "33d5c648918761be4bbee3872882539da4d83f01e654dca7a152de0b76c106f3"
+    },
+    {
+      "path": "src/main/res/xml/data_extraction_rules.xml",
+      "sha256": "38ecb2f5eaf10e45c2f2ef14c7d876e038b00943e760be47a9cc06fe68406086"
+    },
+    {
+      "path": "src/main/res/xml/file_paths.xml",
+      "sha256": "c94c61d7d455dd821b21bf52d5abde1bfc34f53d96686b80ec9227a1b6ff52d5"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/ChatAdapter.kt",
+      "sha256": "ac80bc20aaf95364c8d5a8b41eb995263138ce2761eb339bea142ce860e64cfd"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/GenerationConfigSample.kt",
+      "sha256": "8918ddcb9f03853d0a90342039c3f63a6d18f410ab5e661db568a77e65def96b"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/MainActivity.kt",
+      "sha256": "d689dadb4408d24cca96a3acafc40ccf7e7728469e21fecdefd7f700d543f6c9"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/MyApplication.kt",
+      "sha256": "1c061bdd532fffd4d0bac2404e46271cace857c35835990b1bb7f4b500a0a6f6"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/activity/FileContentActivity.kt",
+      "sha256": "7a5d05deb6a9126bcdebb106276f89cdda29de3d9fee25de5a7e2564d075b385"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/agent/AgentTools.kt",
+      "sha256": "7a9ba3dcc5459773b4d235bc900554e49e4c547344da0f183a7dc0ac54ba334a"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/agent/ProjectWorkspace.kt",
+      "sha256": "deb2a0191ab5692c16dfc6007c7c2c01d49507bd7674562f755181f5c81cf35a"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/agent/SharedInputManager.kt",
+      "sha256": "06d01529b7f1cc0f0636085e751472f69b8ae64c2c41116b5b8fd45087d448ce"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/artifact/PptxBuilder.kt",
+      "sha256": "7283823e3d18db923831118e39e35fafddd858cb178b76663d4ab504cf70efde"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/bean/ModelData.kt",
+      "sha256": "8da17bdcb3ada764d1805ea9d169912cd8c0dbc88c388183217ee431520f62fc"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/history/ConversationStore.kt",
+      "sha256": "78dc0488cb0044515d46e545a1d86152ad9be20691f51d5687edb58282539aaa"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/history/ProjectSessionStore.kt",
+      "sha256": "92e75f1c2a4f993a1ce5cac49d9fa12765dde7a499fea146b96ac96b3e324093"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/GitHubImageRuntimeInstaller.kt",
+      "sha256": "51ace045e5a8e4e4f37f524a79864998d04e5a042d335c8d3b776149b979061c"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/ImageGenerationRuntime.kt",
+      "sha256": "68ec046aa9c801b7cf8d81f137d97dad3422cfb1e926522460e525ac3522bb5d"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/ImageModeController.kt",
+      "sha256": "9181bf3d5c5e617808e76274798880e9b2ad05fbd3328ac06b85c1c06caa9991"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/ImageRuntimeInstaller.kt",
+      "sha256": "c54e42f9cd8b048aa4e1719fc2fbf09848e576f6ecefe29cbaf44b0b8799a7ae"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/PromptPresetStore.kt",
+      "sha256": "2bc113b017b4258d8ed4b9bf7cf4f70534bd12d879b21300144c22b79c97b951"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/QnnInProcessBridge.kt",
+      "sha256": "fcfe2ee02888fd034b7e0fa87946badb6f42e0a79263f631c69e962b361a2254"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/RuntimeDownloadForegroundService.kt",
+      "sha256": "d88468424e38a38b5203b58cd284a4b947de744b3d8502d38546e00e8f2ac989"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/image/RuntimePartDownloader.kt",
+      "sha256": "0f658f150f2dc7bf947b99e62f1e17cc715eb4492109a0e8dcb9bdda49288197"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/listeners/CustomDialogInterface.kt",
+      "sha256": "2c214f4e07617bc83250c592514025744280a349ed5c103a5cf94c7ddd15c65a"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/model/HuggingFaceSearchClient.kt",
+      "sha256": "6fcc78bff870d3321cb0eb5e33f255fbd6771016ec0c41e3e6ef95326a644bec"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/model/ModelCatalog.kt",
+      "sha256": "352f7bb342d88042bafc09d53340b72e3a9ce8451617da2ea9dc94fa594f45b6"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/model/ModelLibraryActivity.kt",
+      "sha256": "80e651fa01f5263042b4bc31619512cb4e7e24abbfa1d308759580c143c79ac4"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/ExecShell.java",
+      "sha256": "8d88cde5382ae21c3282dcc8e0f2778030ddf8ffaf1220e824c5e01b272e1052"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/GgufVisionConfig.kt",
+      "sha256": "3ef6b9a57c7e8a4808a415d81e22c9e0c625ecf68d57c1ed78ffac988197563b"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/ImgUtil.kt",
+      "sha256": "984b263757760a107de996f7505a7bc79249cf5865fcd65b1f78b176193ce813"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/KeyboardUtil.kt",
+      "sha256": "a0457d099dcf3e5e6f722960dd7be24f2352d582d08c161b85956398efb97672"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/KotlinUtil.kt",
+      "sha256": "15996c599009fed8fb474eee96dd39f13250e2b45a7cf31f924b813a70884bfd"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/SharePreferenceKeys.kt",
+      "sha256": "b220208f5deba140108fbad4cd48c939ffa5d13f57db427727d6424e941ffa8d"
+    },
+    {
+      "path": "src/main/java/com/geniex/demo/utils/UiErrorLocalizer.kt",
+      "sha256": "9d196f1a3fae65081295a07e64d1015799c5e7cf554fbcf450c5eb0348559854"
+    },
+    {
+      "path": "src/main/assets/sdxl_runtime/phone_generate.py",
+      "sha256": "e3375df464a5d83f08e768eceb730a6fc5421fabca9a227be40a254ef0aae589"
+    },
+    {
+      "path": "src/main/assets/sdxl_runtime/phone_runtime_accel.py",
+      "sha256": "d4baec8773eb12055c47639125372f5c6b5523ea4c51904d5aafc037ea81fb9d"
+    },
+    {
+      "path": "src/main/assets/sdxl_runtime/python_native_map.json",
+      "sha256": "743936cc53ec383008b1894b1fb7b37178ea721a6d2888073a077481e31d4cdc"
+    },
+    {
+      "path": "src/main/assets/sdxl_runtime/rin_tensor_io.py",
+      "sha256": "417d5de320dc3ab11692d7b3306f57e7f74db79980ef722f77764514cb6bb2f9"
+    },
+    {
+      "path": "src/main/assets/third_party/model_to_npu/LICENSE",
+      "sha256": "75f5f2ae732cdc31adf8ad90a42ed4ed47476b3f27fcdf90de13e79d6788309d"
+    },
+    {
+      "path": "src/main/assets/third_party/model_to_npu/NOTICE",
+      "sha256": "758460d763693392f794ea775bff7f3f04d513d8143301c7d2c48a8ac4e882ea"
+    },
+    {
+      "path": "src/main/assets/third_party/model_to_npu/SOURCE.txt",
+      "sha256": "743b8e64fe4bb9ee992cb878afbe44f195653fffc3445a77149a4191f28eab5f"
+    },
+    {
+      "path": "src/debug/java/com/geniex/demo/model/TestModelSeeder.kt",
+      "sha256": "7f98c3f3a8f381e06489bb821aa41990b617cf9bcc0d807cef2b8f06e6740213"
+    },
+    {
+      "path": "src/androidTest/java/com/geniex/demo/GenieXChatTest.kt",
+      "sha256": "f8fdafe00649a976fe986e74ffd0ca970153b2743885c4eb7d07617f33555bc2"
+    },
+    {
+      "path": "build.gradle",
+      "sha256": "e3c3216f2d9363e0c26a1144987e8f192eb97b893af288ff7cdea798a572a85a"
+    },
+    {
+      "path": "settings.gradle",
+      "sha256": "a7fe213420b02fa843495d3742ad4587576c21e04fcbe7ee27415bb56ecfdd2c"
+    },
+    {
+      "path": "gradle.properties",
+      "sha256": "18812dba4c4a9400ed1fc88a109853b486f36e7f7f4705559f9d630103ebde60"
+    }
+  ],
+  "sdk_patch_files": [
+    "examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.cpp",
+    "examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.hpp",
+    "examples/QNN/SampleApp/SampleApp/src/Log/Logger.cpp",
+    "examples/QNN/SampleApp/SampleApp/src/Log/Logger.hpp",
+    "examples/QNN/SampleApp/SampleApp/src/Utils/DataUtil.cpp",
+    "examples/QNN/SampleApp/SampleApp/src/Utils/IOTensor.cpp"
+  ],
+  "native_dependencies": "QAIRT 2.48.0.260626, Python native runtime; external prerequisites excluded"
+}

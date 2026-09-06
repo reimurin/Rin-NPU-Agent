@@ -136,6 +136,7 @@ class MainActivity : FragmentActivity() {
     private var chatUserDragging = false
     private var drawerSwipeDownX = 0f
     private var drawerSwipeDownY = 0f
+    private var drawerSwipeTriggered = false
 
     private var isLoadLlmModel = false
     private var isLoadVlmModel = false
@@ -733,16 +734,21 @@ class MainActivity : FragmentActivity() {
                 MotionEvent.ACTION_DOWN -> {
                     drawerSwipeDownX = event.x
                     drawerSwipeDownY = event.y
+                    drawerSwipeTriggered = false
                 }
-                MotionEvent.ACTION_UP -> {
-                    val dx = event.x - drawerSwipeDownX
-                    val dy = event.y - drawerSwipeDownY
-                    val fromMainArea = drawerSwipeDownX <= resources.displayMetrics.widthPixels * 0.45f
-                    if (fromMainArea && dx >= dp(72) && dx > abs(dy) * 1.35f) {
-                        binding.drawerLayout.openDrawer(GravityCompat.START)
-                        return true
+                MotionEvent.ACTION_MOVE -> {
+                    if (!drawerSwipeTriggered) {
+                        val dx = event.x - drawerSwipeDownX
+                        val dy = event.y - drawerSwipeDownY
+                        val fromMainArea = drawerSwipeDownX <= resources.displayMetrics.widthPixels * 0.65f
+                        if (fromMainArea && dx >= dp(48) && dx > abs(dy) * 1.15f) {
+                            drawerSwipeTriggered = true
+                            binding.drawerLayout.openDrawer(GravityCompat.START)
+                            return true
+                        }
                     }
                 }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> drawerSwipeTriggered = false
             }
         }
         return super.dispatchTouchEvent(event)
@@ -1603,6 +1609,8 @@ class MainActivity : FragmentActivity() {
         data: Intent?,
     ) {
         super.onActivityResult(requestCode, resultCode, data)
+
+        if (::imageModeController.isInitialized && imageModeController.onActivityResult(requestCode, resultCode, data)) return
 
         if (requestCode == REQUEST_WORKSPACE) {
             val uri = data?.data

@@ -32,3 +32,16 @@ Thumbs.db
 
 # Local patch backups
 *.rinbak-*
+
+# Local runtime dependencies and development artifacts
+__pycache__/
+*.pyc
+*.bak
+*.so
+*.dll
+*.apk
+*.onnx
+*.safetensors
+*.ttf
+*.otf
+qnn-native-sdk-2.48/

@@ -1,0 +1,644 @@
+--- a/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.cpp
++++ b/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.cpp
+@@ -807,88 +807,59 @@
+ // inputs from input_list based files and writes output to .raw files.
+ sample_app::StatusCode sample_app::QnnSampleApp::executeGraphs() {
+   auto returnStatus = StatusCode::SUCCESS;
++  m_lastExecutionDetail.clear();
+   for (unsigned int run = 0; run < m_numInferences; run++) {
+     for (size_t graphIdx = 0; graphIdx < m_graphsCount; graphIdx++) {
+       QNN_DEBUG("Starting execution for graphIdx: %d", graphIdx);
+       if (graphIdx >= m_inputFileLists.size()) {
++        m_lastExecutionDetail = "input_list_missing graphIdx=" + std::to_string(graphIdx);
+         QNN_ERROR("No Inputs available for: %d", graphIdx);
+         returnStatus = StatusCode::FAILURE;
+         break;
+       }
+-      Qnn_Tensor_t* inputs  = nullptr;
++      Qnn_Tensor_t* inputs = nullptr;
+       Qnn_Tensor_t* outputs = nullptr;
+-      if (iotensor::StatusCode::SUCCESS !=
+-          m_ioTensor.setupInputAndOutputTensors(&inputs, &outputs, (*m_graphsInfo)[graphIdx])) {
++      if (iotensor::StatusCode::SUCCESS != m_ioTensor.setupInputAndOutputTensors(&inputs, &outputs, (*m_graphsInfo)[graphIdx])) {
++        m_lastExecutionDetail = "tensor_setup graphIdx=" + std::to_string(graphIdx);
+         QNN_ERROR("Error in setting up Input and output Tensors for graphIdx: %d", graphIdx);
+         returnStatus = StatusCode::FAILURE;
+         break;
+       }
+       auto inputFileList = m_inputFileLists[graphIdx];
+-      auto graphInfo     = (*m_graphsInfo)[graphIdx];
++      auto graphInfo = (*m_graphsInfo)[graphIdx];
+       if (!inputFileList.empty()) {
+-        size_t totalCount           = inputFileList[0].size();
++        size_t totalCount = inputFileList[0].size();
+         size_t inputFileIndexOffset = 0;
+         while (inputFileIndexOffset < totalCount) {
+           iotensor::StatusCode iotReturnStatus;
+           size_t numInputFilesPopulated;
+           size_t batchSize;
+-          std::tie(iotReturnStatus, numInputFilesPopulated, batchSize) =
+-              m_ioTensor.populateInputTensors(graphIdx,
+-                                              inputFileList,
+-                                              inputFileIndexOffset,
+-                                              false,
+-                                              m_inputNameToIndex[graphIdx],
+-                                              inputs,
+-                                              graphInfo,
+-                                              m_inputDataType);
++          std::tie(iotReturnStatus, numInputFilesPopulated, batchSize) = m_ioTensor.populateInputTensors(
++              graphIdx, inputFileList, inputFileIndexOffset, false, m_inputNameToIndex[graphIdx], inputs, graphInfo, m_inputDataType);
+           if (iotensor::StatusCode::SUCCESS != iotReturnStatus) {
++            m_lastExecutionDetail = "input_load graphIdx=" + std::to_string(graphIdx) + " inputs=" + std::to_string(graphInfo.numInputTensors);
+             returnStatus = StatusCode::FAILURE;
+           }
+           if (StatusCode::SUCCESS == returnStatus) {
+-            QNN_DEBUG("Successfully populated input tensors for graphIdx: %d", graphIdx);
+-            Qnn_ErrorHandle_t executeStatus = QNN_GRAPH_NO_ERROR;
+-            QnnSystemProfile_ProfileData_t profileData = QNN_SYSTEM_PROFILE_DATA_INIT;
+-            if (ProfilingLevel::OFF != m_profilingLevel && m_serializationTargetHandle != nullptr) {
+-              profileData.version              = QNN_SYSTEM_PROFILE_DATA_VERSION_1;
+-              profileData.v1.header.methodType = QNN_SYSTEM_PROFILE_METHOD_TYPE_BACKEND_EXECUTE;
+-              profileData.v1.header.startTime  = getTimeStampInUs();
+-              profileData.v1.header.graphName  = graphInfo.graphName;
+-            }
+-            executeStatus =
+-                m_qnnFunctionPointers.qnnInterface.graphExecute(graphInfo.graph,
+-                                                                inputs,
+-                                                                graphInfo.numInputTensors,
+-                                                                outputs,
+-                                                                graphInfo.numOutputTensors,
+-                                                                m_profileBackendHandle,
+-                                                                nullptr);
++            Qnn_ErrorHandle_t executeStatus = m_qnnFunctionPointers.qnnInterface.graphExecute(
++                graphInfo.graph, inputs, graphInfo.numInputTensors, outputs, graphInfo.numOutputTensors, m_profileBackendHandle, nullptr);
+             if (QNN_GRAPH_NO_ERROR != executeStatus) {
++              const std::string graphName = graphInfo.graphName ? graphInfo.graphName : "";
++              m_lastExecutionDetail = "graph_execute graphIdx=" + std::to_string(graphIdx) +
++                                      " code=" + std::to_string((long long)executeStatus) +
++                                      " graph=" + graphName +
++                                      " inputs=" + std::to_string(graphInfo.numInputTensors) +
++                                      " outputs=" + std::to_string(graphInfo.numOutputTensors);
++              QNN_ERROR("graphExecute failed graphIdx=%d code=%lld graph=%s inputs=%d outputs=%d",
++                        graphIdx, (long long)executeStatus, graphName.c_str(), graphInfo.numInputTensors, graphInfo.numOutputTensors);
+               returnStatus = StatusCode::FAILURE;
+             }
+-
+-            if (ProfilingLevel::OFF != m_profilingLevel) {
+-              if (m_serializationTargetHandle != nullptr) {
+-                profileData.v1.header.stopTime = getTimeStampInUs();
+-                extractBackendProfilingInfo(m_profileBackendHandle, &profileData);
+-              } else {
+-                extractBackendProfilingInfo(m_profileBackendHandle, nullptr);
+-              }
+-            }
+-
+             if (StatusCode::SUCCESS == returnStatus) {
+-              QNN_DEBUG("Successfully executed graphIdx: %d ", graphIdx);
+ #ifndef __hexagon__
+-              if (iotensor::StatusCode::SUCCESS !=
+-                  m_ioTensor.writeOutputTensors(graphIdx,
+-                                                inputFileIndexOffset,
+-                                                graphInfo.graphName,
+-                                                outputs,
+-                                                graphInfo.numOutputTensors,
+-                                                m_outputDataType,
+-                                                m_graphsCount,
+-                                                m_outputPath,
+-                                                numInputFilesPopulated,
+-                                                batchSize)) {
++              if (iotensor::StatusCode::SUCCESS != m_ioTensor.writeOutputTensors(
++                      graphIdx, inputFileIndexOffset, graphInfo.graphName, outputs, graphInfo.numOutputTensors,
++                      m_outputDataType, m_graphsCount, m_outputPath, numInputFilesPopulated, batchSize)) {
++                m_lastExecutionDetail = "output_write graphIdx=" + std::to_string(graphIdx) + " outputs=" + std::to_string(graphInfo.numOutputTensors);
+                 returnStatus = StatusCode::FAILURE;
+               }
+ #endif
+@@ -896,22 +867,17 @@
+             inputFileIndexOffset += numInputFilesPopulated;
+           }
+           if (StatusCode::SUCCESS != returnStatus) {
+-            QNN_ERROR("Execution of Graph: %d failed!", graphIdx);
++            QNN_ERROR("Execution of Graph: %d failed! detail=%s", graphIdx, m_lastExecutionDetail.c_str());
+             break;
+           }
+         }
+       }
+-      m_ioTensor.tearDownInputAndOutputTensors(
+-          inputs, outputs, graphInfo.numInputTensors, graphInfo.numOutputTensors);
+-      inputs  = nullptr;
+-      outputs = nullptr;
+-      if (StatusCode::SUCCESS != returnStatus) {
+-        break;
+-      }
+-    }
+-  } /* loop numInferences */
+-
++      m_ioTensor.tearDownInputAndOutputTensors(inputs, outputs, graphInfo.numInputTensors, graphInfo.numOutputTensors);
++      if (StatusCode::SUCCESS != returnStatus) break;
++    }
++  }
+   qnn_wrapper_api::freeGraphsInfo(&m_graphsInfo, m_graphsCount);
+   m_graphsInfo = nullptr;
++  if (StatusCode::SUCCESS == returnStatus) m_lastExecutionDetail = "ok";
+   return returnStatus;
+ }
+--- a/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.hpp
++++ b/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.hpp
+@@ -93,6 +93,8 @@
+ 
+   StatusCode verifyFailReturnStatus(Qnn_ErrorHandle_t errCode);
+ 
++  const std::string& getLastExecutionDetail() const { return m_lastExecutionDetail; }
++
+  private:
+   StatusCode extractBackendProfilingInfo(Qnn_ProfileHandle_t profileHandle,
+                                          QnnSystemProfile_ProfileData_t *profileData);
+@@ -140,6 +142,8 @@
+   unsigned int m_numInferences;
+   QnnSystemProfile_SerializationTargetHandle_t m_serializationTargetHandle = nullptr;
+ 
++  std::string m_lastExecutionDetail;
++
+   std::string m_dlcPath;
+   QnnSystemDlc_Handle_t m_dlcHandle = nullptr;
+   Qnn_LogHandle_t m_dlcLogHandle = nullptr;
+--- a/examples/QNN/SampleApp/SampleApp/src/Log/Logger.cpp
++++ b/examples/QNN/SampleApp/SampleApp/src/Log/Logger.cpp
+@@ -83,6 +83,13 @@
+   return true;
+ }
+ 
++bool qnn::log::initializeLogging(QnnLog_Callback_t callback, QnnLog_Level_t maxLevel) {
++  QnnLog_Error_t status;
++  ::qnn::log::Logger::reset();
++  g_logger = ::qnn::log::Logger::createLogger(callback, maxLevel, &status);
++  return QNN_LOG_NO_ERROR == status && g_logger != nullptr;
++}
++
+ QnnLog_Callback_t qnn::log::getLogCallback() { return g_logger->getLogCallback(); }
+ 
+ QnnLog_Level_t qnn::log::getLogLevel() { return g_logger->getMaxLevel(); }
+--- a/examples/QNN/SampleApp/SampleApp/src/Log/Logger.hpp
++++ b/examples/QNN/SampleApp/SampleApp/src/Log/Logger.hpp
+@@ -55,6 +55,7 @@
+ namespace log {
+ 
+ bool initializeLogging();
++bool initializeLogging(QnnLog_Callback_t callback, QnnLog_Level_t maxLevel);
+ 
+ QnnLog_Callback_t getLogCallback();
+ 
+--- a/examples/QNN/SampleApp/SampleApp/src/Utils/DataUtil.cpp
++++ b/examples/QNN/SampleApp/SampleApp/src/Utils/DataUtil.cpp
+@@ -6,6 +6,7 @@
+ //
+ //==============================================================================
+ #include <cmath>
++#include <cstring>
+ #include <fstream>
+ #include <iostream>
+ #include <numeric>
+@@ -92,68 +93,43 @@
+ }
+ 
+ datautil::ReadBatchDataRetType_t datautil::readBatchData(const std::vector<std::string>& filePaths,
+-                                                         const size_t filePathsIndexOffset,
+-                                                         const bool loopBackToStart,
+-                                                         const std::vector<size_t>& dims,
+-                                                         const Qnn_DataType_t dataType,
+-                                                         uint8_t* buffer) {
+-  if (nullptr == buffer) {
+-    QNN_ERROR("buffer is nullptr");
+-    return std::make_tuple(StatusCode::INVALID_BUFFER, 0, 0);
+-  }
+-  StatusCode err{StatusCode::SUCCESS};
+-  size_t tensorLength{0};
+-  std::tie(err, tensorLength) = datautil::calculateLength(dims, dataType);
+-  if (StatusCode::SUCCESS != err) {
+-    return std::make_tuple(err, 0, 0);
+-  }
+-  size_t numInputsCopied = 0;
+-  size_t numBatchSize    = 0;
+-  size_t totalLength     = 0;
+-  size_t fileIndex       = filePathsIndexOffset;
+-  while (true) {
+-    if (fileIndex >= filePaths.size()) {
+-      if (loopBackToStart) {
+-        fileIndex = fileIndex % filePaths.size();
+-      } else {
+-        numBatchSize += (tensorLength - totalLength) / (totalLength / numBatchSize);
+-        // pad the vector with zeros
+-        memset(buffer + totalLength, 0, (tensorLength - totalLength) * sizeof(char));
++    const size_t filePathsIndexOffset, const bool loopBackToStart,
++    const std::vector<size_t>& dims, const Qnn_DataType_t dataType, uint8_t* buffer) {
++  if (!buffer) return {StatusCode::INVALID_BUFFER, 0, 0};
++  if (filePaths.empty() || filePathsIndexOffset >= filePaths.size()) {
++    QNN_ERROR("RIN_INPUT_ERROR empty/exhausted input list");
++    return {StatusCode::DATA_SIZE_MISMATCH, 0, 0};
++  }
++  StatusCode status; size_t tensorLength = 0;
++  std::tie(status, tensorLength) = calculateLength(dims, dataType);
++  if (status != StatusCode::SUCCESS || !tensorLength) return {StatusCode::INVALID_DIMENSIONS, 0, 0};
++  size_t copied = 0, total = 0, sampleSize = 0, index = filePathsIndexOffset;
++  while (total < tensorLength) {
++    if (index >= filePaths.size()) {
++      if (loopBackToStart) index = 0;
++      else {
++        if (!sampleSize) return {StatusCode::DATA_SIZE_MISMATCH, copied, 0};
++        std::memset(buffer + total, 0, tensorLength - total);
+         break;
+       }
+     }
+-    std::ifstream in(filePaths[fileIndex], std::ifstream::binary);
+-    if (!in) {
+-      QNN_ERROR("Failed to open input file: %s", (filePaths[fileIndex]).c_str());
+-      return std::make_tuple(StatusCode::FILE_OPEN_FAIL, numInputsCopied, numBatchSize);
++    std::ifstream in(filePaths[index], std::ios::binary | std::ios::ate);
++    if (!in) { QNN_ERROR("Failed to open input file: %s", filePaths[index].c_str()); return {StatusCode::FILE_OPEN_FAIL, copied, 0}; }
++    const auto end = in.tellg();
++    if (end <= 0) { QNN_ERROR("RIN_INPUT_ERROR empty/unreadable file %s", filePaths[index].c_str()); return {StatusCode::DATA_SIZE_MISMATCH, copied, 0}; }
++    const size_t size = static_cast<size_t>(end);
++    if (size > tensorLength || tensorLength % size || (sampleSize && size != sampleSize) ||
++        size > tensorLength - total || (!dims.empty() && dims[0] == 1 && size != tensorLength)) {
++      QNN_ERROR("RIN_INPUT_ERROR file=%s expected_extent=%zu actual_bytes=%zu", filePaths[index].c_str(), tensorLength, size);
++      return {StatusCode::DATA_SIZE_MISMATCH, copied, 0};
+     }
+-    in.seekg(0, in.end);
+-    const size_t fileSize = in.tellg();
+-    in.seekg(0, in.beg);
+-    if ((tensorLength % fileSize) != 0 || fileSize > tensorLength || fileSize == 0) {
+-      QNN_ERROR(
+-          "Given input file %s with file size in bytes %d. If the model expects a batch size of "
+-          "one, the file size should match the tensor extent: %d bytes. If the model expects a "
+-          "batch size > 1, the file size should evenly divide the tensor extent: %d bytes.",
+-          filePaths[fileIndex].c_str(),
+-          fileSize,
+-          tensorLength,
+-          tensorLength);
+-      return std::make_tuple(StatusCode::DATA_SIZE_MISMATCH, numInputsCopied, numBatchSize);
+-    }
+-    if (!in.read(reinterpret_cast<char*>(buffer + (numInputsCopied * fileSize)), fileSize)) {
+-      QNN_ERROR("Failed to read the contents of: %s", filePaths.front().c_str());
+-      return std::make_tuple(StatusCode::DATA_READ_FAIL, numInputsCopied, numBatchSize);
+-    }
+-    totalLength += fileSize;
+-    numInputsCopied += 1;
+-    numBatchSize += 1;
+-    fileIndex += 1;
+-    if (totalLength >= tensorLength) {
+-      break;
+-    }
+-  }
+-  return std::make_tuple(StatusCode::SUCCESS, numInputsCopied, numBatchSize);
++    sampleSize = size;
++    in.seekg(0, std::ios::beg);
++    if (!in.read(reinterpret_cast<char*>(buffer + total), static_cast<std::streamsize>(size)))
++      return {StatusCode::DATA_READ_FAIL, copied, 0};
++    total += size; ++copied; ++index;
++  }
++  return {StatusCode::SUCCESS, copied, tensorLength / sampleSize};
+ }
+ 
+ std::tuple<datautil::StatusCode, size_t> datautil::getFileSize(std::string filePath) {
+@@ -220,38 +196,25 @@
+ }
+ 
+ datautil::StatusCode datautil::writeBatchDataToFile(std::vector<std::string> fileDirs,
+-                                                    std::string fileName,
+-                                                    std::vector<size_t> dims,
+-                                                    Qnn_DataType_t dataType,
+-                                                    uint8_t* buffer,
+-                                                    const size_t batchSize) {
+-  if (nullptr == buffer) {
+-    QNN_ERROR("buffer is nullptr");
+-    return StatusCode::INVALID_BUFFER;
+-  }
+-  StatusCode err{StatusCode::SUCCESS};
+-  size_t length{0};
+-  std::tie(err, length) = datautil::calculateLength(dims, dataType);
+-  if (StatusCode::SUCCESS != err) {
+-    return err;
+-  }
+-  auto outputSize = (length / batchSize);
+-  for (size_t batchIndex = 0; batchIndex < fileDirs.size(); batchIndex++) {
+-    std::string fileDir = fileDirs[batchIndex];
+-    if (!pal::Directory::makePath(fileDir)) {
+-      QNN_ERROR("Failed to create output directory: %s", fileDir.c_str());
+-      return StatusCode::DIRECTORY_CREATE_FAIL;
+-    }
+-    const std::string outputPath(fileDir + pal::Path::getSeparator() + fileName);
+-    std::ofstream os(outputPath, std::ofstream::binary);
+-    if (!os) {
+-      QNN_ERROR("Failed to open output file for writing: %s", outputPath.c_str());
+-      return StatusCode::FILE_OPEN_FAIL;
+-    }
+-    for (size_t l = 0; l < outputSize; l++) {
+-      size_t bufferIndex = l + (batchIndex * outputSize);
+-      os.write(reinterpret_cast<char*>(&(*(buffer + bufferIndex))), 1);
+-    }
++    std::string fileName, std::vector<size_t> dims, Qnn_DataType_t dataType,
++    uint8_t* buffer, const size_t batchSize) {
++  if (!buffer) return StatusCode::INVALID_BUFFER;
++  if (!batchSize || fileDirs.empty() || fileDirs.size() > batchSize) return StatusCode::INVALID_DIMENSIONS;
++  StatusCode status; size_t length = 0;
++  std::tie(status, length) = calculateLength(dims, dataType);
++  if (status != StatusCode::SUCCESS) return status;
++  if (!length || length % batchSize) return StatusCode::DATA_SIZE_MISMATCH;
++  const size_t outputSize = length / batchSize;
++  for (size_t index = 0; index < fileDirs.size(); ++index) {
++    if (!pal::Directory::makePath(fileDirs[index])) return StatusCode::DIRECTORY_CREATE_FAIL;
++    const std::string path = fileDirs[index] + pal::Path::getSeparator() + fileName;
++    std::ofstream out(path, std::ios::binary | std::ios::trunc);
++    if (!out) { QNN_ERROR("RIN_OUTPUT_ERROR cannot open %s", path.c_str()); return StatusCode::FILE_OPEN_FAIL; }
++    out.write(reinterpret_cast<const char*>(buffer + index * outputSize), static_cast<std::streamsize>(outputSize));
++    out.flush();
++    if (!out.good()) { QNN_ERROR("RIN_OUTPUT_ERROR short write %s expected=%zu", path.c_str(), outputSize); return StatusCode::DATA_WRITE_FAIL; }
++    out.close();
++    if (out.fail()) { QNN_ERROR("RIN_OUTPUT_ERROR close failed %s", path.c_str()); return StatusCode::DATA_WRITE_FAIL; }
+   }
+   return StatusCode::SUCCESS;
+ }
+--- a/examples/QNN/SampleApp/SampleApp/src/Utils/IOTensor.cpp
++++ b/examples/QNN/SampleApp/SampleApp/src/Utils/IOTensor.cpp
+@@ -10,6 +10,10 @@
+ #include <fstream>
+ #include <iostream>
+ #include <random>
++#include <cctype>
++#include <cstdio>
++#include <set>
++#include <sstream>
+ 
+ #include "DataUtil.hpp"
+ #include "IOTensor.hpp"
+@@ -24,6 +28,49 @@
+ 
+ using namespace qnn;
+ using namespace qnn::tools;
++
++namespace {
++std::string rinJsonQuote(const std::string& text) {
++  std::string out = "\"";
++  const char* hex = "0123456789abcdef";
++  for (unsigned char c : text) {
++    if (c == '"' || c == '\\') { out.push_back('\\'); out.push_back(c); }
++    else if (c < 32) { out += "\\u00"; out.push_back(hex[c >> 4]); out.push_back(hex[c & 15]); }
++    else out.push_back(c);
++  }
++  out.push_back('"');
++  return out;
++}
++uint16_t rinFloatToHalf(float value) {
++  uint32_t bits = 0; std::memcpy(&bits, &value, sizeof(bits));
++  uint32_t sign = (bits >> 16) & 0x8000u, exp = (bits >> 23) & 0xffu, mant = bits & 0x7fffffu;
++  if (exp == 0xffu) return static_cast<uint16_t>(sign | 0x7c00u | (mant ? 0x0200u : 0u));
++  int32_t newExp = static_cast<int32_t>(exp) - 127 + 15;
++  if (newExp >= 31) return static_cast<uint16_t>(sign | 0x7c00u);
++  if (newExp <= 0) {
++    if (newExp < -10) return static_cast<uint16_t>(sign);
++    mant |= 0x800000u; uint32_t shift = static_cast<uint32_t>(14 - newExp), halfMant = mant >> shift;
++    uint32_t roundBit = 1u << (shift - 1u);
++    if ((mant & roundBit) && ((mant & (roundBit - 1u)) || (halfMant & 1u))) ++halfMant;
++    return static_cast<uint16_t>(sign | halfMant);
++  }
++  uint32_t halfExp = static_cast<uint32_t>(newExp) << 10, halfMant = mant >> 13;
++  if ((mant & 0x1000u) && ((mant & 0x0fffu) || (halfMant & 1u))) {
++    ++halfMant; if (halfMant == 0x400u) { halfMant = 0; halfExp += 0x400u; if (halfExp >= 0x7c00u) return static_cast<uint16_t>(sign | 0x7c00u); }
++  }
++  return static_cast<uint16_t>(sign | halfExp | halfMant);
++}
++float rinHalfToFloat(uint16_t value) {
++  uint32_t sign = (static_cast<uint32_t>(value & 0x8000u)) << 16, exp = (value >> 10) & 0x1fu, mant = value & 0x03ffu, bits = 0;
++  if (exp == 0) {
++    if (mant == 0) bits = sign;
++    else { int32_t e = -14; while ((mant & 0x0400u) == 0) { mant <<= 1; --e; } mant &= 0x03ffu; bits = sign | (static_cast<uint32_t>(e + 127) << 23) | (mant << 13); }
++  } else if (exp == 0x1fu) bits = sign | 0x7f800000u | (mant << 13);
++  else bits = sign | ((exp + 112u) << 23) | (mant << 13);
++  float out = 0.0f; std::memcpy(&out, &bits, sizeof(out)); return out;
++}
++}
++
+ 
+ // Helper method to read data from files to a buffer.
+ iotensor::PopulateInputTensorsRetType_t iotensor::IOTensor::readDataAndAllocateBuffer(
+@@ -73,6 +120,13 @@
+   fillDims(dims, QNN_TENSOR_GET_DIMENSIONS(tensor), QNN_TENSOR_GET_RANK(tensor));
+ 
+   switch (QNN_TENSOR_GET_DATA_TYPE(tensor)) {
++    case QNN_DATATYPE_FLOAT_16: {
++      auto* dst = static_cast<uint16_t*>(QNN_TENSOR_GET_CLIENT_BUF(tensor).data);
++      const size_t count = datautil::calculateElementCount(dims);
++      for (size_t i = 0; i < count; ++i) dst[i] = rinFloatToHalf(floatBuffer[i]);
++      break;
++    }
++
+     case QNN_DATATYPE_UFIXED_POINT_8:
+       datautil::floatToTfN<uint8_t>(static_cast<uint8_t*>(QNN_TENSOR_GET_CLIENT_BUF(tensor).data),
+                                     floatBuffer,
+@@ -286,6 +340,20 @@
+     if (!inputNodeName.empty() && inputNameToIndex.find(inputNodeName) != inputNameToIndex.end()) {
+       inputNameIdx = inputNameToIndex.at(inputNodeName);
+     }
++    if ((!inputNameToIndex.empty() && inputNameToIndex.find(inputNodeName) == inputNameToIndex.end()) ||
++        inputNameIdx >= filePathsVector.size() || filePathsIndexOffset >= filePathsVector[inputNameIdx].size()) {
++      QNN_ERROR("RIN_INPUT_ERROR missing named binding tensor=%s index=%zu row=%zu", inputNodeName.c_str(), inputIdx, filePathsIndexOffset);
++      return {StatusCode::FAILURE, 0, 0};
++    }
++    std::ostringstream dimsText;
++    const auto& tensor = graphInfo.inputTensors[inputIdx];
++    for (size_t d = 0; d < QNN_TENSOR_GET_RANK(tensor); ++d) {
++      if (d) dimsText << 'x';
++      dimsText << QNN_TENSOR_GET_DIMENSIONS(tensor)[d];
++    }
++    QNN_INFO("RIN_INPUT index=%zu tensor=%s row=%zu shape=%s native_type=%u file=%s", inputIdx,
++        inputNodeName.c_str(), filePathsIndexOffset, dimsText.str().c_str(),
++        static_cast<unsigned int>(QNN_TENSOR_GET_DATA_TYPE(tensor)), filePathsVector[inputNameIdx][filePathsIndexOffset].c_str());
+     StatusCode returnStatus;
+     size_t currentInputNumFilesPopulated = 0;
+     size_t currentInputNumBatchSize      = 0;
+@@ -506,6 +574,11 @@
+       returnStatus = allocateBuffer<float>(reinterpret_cast<float**>(buffer), elementCount);
+       break;
+ 
++    case QNN_DATATYPE_FLOAT_16:
++      QNN_DEBUG("allocating float16 buffer");
++      returnStatus = allocateBuffer<uint16_t>(reinterpret_cast<uint16_t**>(buffer), elementCount);
++      break;
++
+     case QNN_DATATYPE_UINT_8:
+     case QNN_DATATYPE_UFIXED_POINT_8:
+       QNN_DEBUG("allocating uint8_t buffer");
+@@ -595,6 +668,12 @@
+     return returnStatus;
+   }
+   switch (QNN_TENSOR_GET_DATA_TYPE(tensor)) {
++    case QNN_DATATYPE_FLOAT_16: {
++      const auto* src = reinterpret_cast<const uint16_t*>(QNN_TENSOR_GET_CLIENT_BUF(tensor).data);
++      for (size_t i = 0; i < elementCount; ++i) (*out)[i] = rinHalfToFloat(src[i]);
++      break;
++    }
++
+     case QNN_DATATYPE_UFIXED_POINT_8:
+       if (datautil::StatusCode::SUCCESS !=
+           datautil::tfNToFloat<uint8_t>(
+@@ -805,68 +884,102 @@
+ // If output_data_type is float_and_native, both above are done.
+ // If the output in the graph is float, then output_data_type has no effect.
+ iotensor::StatusCode iotensor::IOTensor::writeOutputTensors(uint32_t graphIdx,
+-                                                            size_t startIdx,
+-                                                            char* graphName,
+-                                                            Qnn_Tensor_t* outputs,
+-                                                            uint32_t numOutputs,
+-                                                            iotensor::OutputDataType outputDatatype,
+-                                                            uint32_t graphsCount,
+-                                                            std::string outputPath,
+-                                                            size_t numInputFilesPopulated,
+-                                                            size_t outputBatchSize) {
+-  if (nullptr == outputs) {
+-    QNN_ERROR("Received nullptr");
++    size_t startIdx, char* graphName, Qnn_Tensor_t* outputs, uint32_t numOutputs,
++    iotensor::OutputDataType outputDatatype, uint32_t graphsCount,
++    std::string outputPath, size_t numInputFilesPopulated, size_t outputBatchSize) {
++  if (!outputs || !numOutputs || !numInputFilesPopulated || !outputBatchSize) {
++    QNN_ERROR("RIN_OUTPUT_ERROR invalid output/batch arguments");
+     return StatusCode::FAILURE;
+   }
+   if (graphsCount > 1) {
+-    if (nullptr != graphName && strlen(graphName) > 0) {
+-      outputPath += (pal::Path::getSeparator() + std::string(graphName));
+-    } else {
+-      outputPath += (pal::Path::getSeparator() + std::string("Graph_") + std::to_string(graphIdx));
+-    }
+-  }
+-  auto returnStatus = StatusCode::SUCCESS;
++    outputPath += pal::Path::getSeparator() +
++        (graphName && *graphName ? std::string(graphName) : "Graph_" + std::to_string(graphIdx));
++  }
+   std::vector<std::string> outputPaths;
+-  for (size_t idx = 0; idx < numInputFilesPopulated; idx++) {
+-    std::string output = outputPath + (pal::Path::getSeparator() + std::string("Result_") +
+-                                       std::to_string(startIdx + idx));
+-    outputPaths.push_back(output);
+-  }
+-  for (size_t outputIdx = 0; outputIdx < numOutputs; outputIdx++) {
+-    QNN_DEBUG("Writing output for outputIdx: %d", outputIdx);
+-    std::string outputFilePrefix;
+-    if (nullptr != QNN_TENSOR_GET_NAME(outputs[outputIdx]) &&
+-        strlen(QNN_TENSOR_GET_NAME(outputs[outputIdx])) > 0) {
+-      outputFilePrefix = std::string(QNN_TENSOR_GET_NAME(outputs[outputIdx]));
+-    } else {
+-      outputFilePrefix = std::string("Output_") + std::to_string(outputIdx);
+-    }
+-    auto outputFile       = outputFilePrefix + std::string(".raw");
+-    auto outputFileNative = outputFilePrefix + std::string("_native.raw");
+-    if (QNN_TENSOR_GET_DATA_TYPE(outputs[outputIdx]) == QNN_DATATYPE_FLOAT_32) {
+-      QNN_DEBUG("Writing in output->dataType == QNN_DATATYPE_FLOAT_32");
+-      returnStatus =
+-          writeOutputTensor(&(outputs[outputIdx]), outputPaths, outputFile, outputBatchSize);
+-    } else if (outputDatatype == OutputDataType::FLOAT_ONLY) {
+-      QNN_DEBUG("Writing in output->dataType == OutputDataType::FLOAT_ONLY");
+-      returnStatus = convertAndWriteOutputTensorInFloat(
+-          &(outputs[outputIdx]), outputPaths, outputFile, outputBatchSize);
+-    } else if (outputDatatype == OutputDataType::NATIVE_ONLY) {
+-      QNN_DEBUG("Writing in output->dataType == OutputDataType::NATIVE_ONLY");
+-      returnStatus =
+-          writeOutputTensor(&(outputs[outputIdx]), outputPaths, outputFileNative, outputBatchSize);
+-    } else if (outputDatatype == OutputDataType::FLOAT_AND_NATIVE) {
+-      QNN_DEBUG("Writing in output->dataType == OutputDataType::FLOAT_AND_NATIVE");
+-      returnStatus = convertAndWriteOutputTensorInFloat(
+-          &(outputs[outputIdx]), outputPaths, outputFile, outputBatchSize);
+-      if (StatusCode::SUCCESS == returnStatus) {
+-        returnStatus = writeOutputTensor(
+-            &(outputs[outputIdx]), outputPaths, outputFileNative, outputBatchSize);
+-      }
+-    }
+-  }
+-  return returnStatus;
+-}
++  for (size_t idx = 0; idx < numInputFilesPopulated; ++idx)
++    outputPaths.push_back(outputPath + pal::Path::getSeparator() + "Result_" + std::to_string(startIdx + idx));
++  std::ostringstream entries;
++  bool first = true;
++  std::set<std::string> filenames;
++  for (size_t i = 0; i < numOutputs; ++i) {
++    const char* rawName = QNN_TENSOR_GET_NAME(outputs[i]);
++    std::string name = rawName && *rawName ? rawName : "Output_" + std::to_string(i);
++    std::string prefix = name;
++    for (char& c : prefix)
++      if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-' && c != '.') c = '_';
++    if (prefix == "." || prefix == "..") prefix = "Output_" + std::to_string(i);
++    const auto nativeType = QNN_TENSOR_GET_DATA_TYPE(outputs[i]);
++    std::vector<size_t> dims;
++    if (fillDims(dims, QNN_TENSOR_GET_DIMENSIONS(outputs[i]), QNN_TENSOR_GET_RANK(outputs[i])) != StatusCode::SUCCESS || dims.empty())
++      return StatusCode::FAILURE;
++    auto shape = dims;
++    if (shape[0] % outputBatchSize != 0) {
++      QNN_ERROR("RIN_OUTPUT_ERROR unsupported batch division for %s", name.c_str());
++      return StatusCode::FAILURE;
++    }
++    shape[0] /= outputBatchSize;
++    std::ostringstream shapeJson;
++    shapeJson << '[';
++    for (size_t d = 0; d < shape.size(); ++d) { if (d) shapeJson << ','; shapeJson << shape[d]; }
++    shapeJson << ']';
++    const bool floatMode = nativeType == QNN_DATATYPE_FLOAT_32 || outputDatatype == OutputDataType::FLOAT_ONLY || outputDatatype == OutputDataType::FLOAT_AND_NATIVE;
++    const bool nativeMode = nativeType != QNN_DATATYPE_FLOAT_32 && (outputDatatype == OutputDataType::NATIVE_ONLY || outputDatatype == OutputDataType::FLOAT_AND_NATIVE);
++    if (!floatMode && !nativeMode) return StatusCode::FAILURE;
++    for (int mode = 0; mode < 2; ++mode) {
++      if ((mode == 0 && !floatMode) || (mode == 1 && !nativeMode)) continue;
++      const std::string file = prefix + (mode == 0 ? ".raw" : "_native.raw");
++      if (!filenames.insert(file).second) {
++        QNN_ERROR("RIN_OUTPUT_ERROR filename collision %s", file.c_str());
++        return StatusCode::FAILURE;
++      }
++      const auto dtype = mode == 0 ? QNN_DATATYPE_FLOAT_32 : nativeType;
++      const std::string dtypeName = dtype == QNN_DATATYPE_FLOAT_32 ? "float32" :
++          (dtype == QNN_DATATYPE_FLOAT_16 ? "float16" : "native_" + std::to_string(static_cast<uint32_t>(dtype)));
++      StatusCode result;
++      if (mode == 0 && nativeType != QNN_DATATYPE_FLOAT_32)
++        result = convertAndWriteOutputTensorInFloat(&outputs[i], outputPaths, file, outputBatchSize);
++      else result = writeOutputTensor(&outputs[i], outputPaths, file, outputBatchSize);
++      if (result != StatusCode::SUCCESS) {
++        QNN_ERROR("RIN_OUTPUT_ERROR write failed index=%zu tensor=%s file=%s", i, name.c_str(), file.c_str());
++        return StatusCode::FAILURE;
++      }
++      datautil::StatusCode lengthStatus;
++      size_t bytes = 0;
++      std::tie(lengthStatus, bytes) = datautil::calculateLength(shape, dtype);
++      if (lengthStatus != datautil::StatusCode::SUCCESS || !bytes) return StatusCode::FAILURE;
++      for (const auto& dir : outputPaths) {
++        datautil::StatusCode fileStatus; size_t actual = 0;
++        std::tie(fileStatus, actual) = datautil::getFileSize(dir + pal::Path::getSeparator() + file);
++        if (fileStatus != datautil::StatusCode::SUCCESS || actual != bytes) {
++          QNN_ERROR("RIN_OUTPUT_ERROR tensor=%s expected=%zu actual=%zu dir=%s", name.c_str(), bytes, actual, dir.c_str());
++          return StatusCode::FAILURE;
++        }
++      }
++      if (!first) entries << ',';
++      first = false;
++      entries << "{\"index\":" << i << ",\"name\":" << rinJsonQuote(name)
++              << ",\"file\":" << rinJsonQuote(file) << ",\"dtype\":" << rinJsonQuote(dtypeName)
++              << ",\"bytes\":" << bytes << ",\"shape\":" << shapeJson.str() << '}';
++      QNN_INFO("RIN_OUTPUT index=%zu tensor=%s file=%s dtype=%s bytes=%zu shape=%s", i, name.c_str(), file.c_str(), dtypeName.c_str(), bytes, shapeJson.str().c_str());
++    }
++  }
++  for (size_t idx = 0; idx < outputPaths.size(); ++idx) {
++    const std::string path = outputPaths[idx] + pal::Path::getSeparator() + ".rin_qnn_outputs.json";
++    const std::string tmp = path + ".tmp";
++    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
++    out << "{\"schema\":1,\"complete\":true,\"result\":" << (startIdx + idx)
++        << ",\"outputs\":[" << entries.str() << "]}\n";
++    out.flush();
++    if (!out.good()) { QNN_ERROR("RIN_OUTPUT_ERROR manifest write %s", tmp.c_str()); return StatusCode::FAILURE; }
++    out.close();
++    if (out.fail() || std::rename(tmp.c_str(), path.c_str()) != 0) {
++      QNN_ERROR("RIN_OUTPUT_ERROR manifest commit %s", path.c_str());
++      return StatusCode::FAILURE;
++    }
++  }
++  return StatusCode::SUCCESS;
++}
++
+ #endif
+ 
+ // Helper method to allocate a buffer and copy data to it.

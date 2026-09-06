@@ -17,7 +17,24 @@ import kotlin.concurrent.thread
 sealed class ImageInstallEvent {
     data object Checking : ImageInstallEvent()
     data class Unavailable(val message: String) : ImageInstallEvent()
-    data class Downloading(val percent: Int, val done: Long, val total: Long) : ImageInstallEvent()
+    data class Downloading(
+        val percent: Int,
+        val done: Long,
+        val total: Long,
+        val partIndex: Int = 0,
+        val partCount: Int = 0,
+        val partDone: Long = 0L,
+        val partTotal: Long = 0L,
+        val bytesPerSecond: Long = 0L,
+        val etaSeconds: Long = -1L,
+        val threads: Int = 1,
+    ) : ImageInstallEvent()
+    data class BrowserWaiting(
+        val foundParts: Int,
+        val totalParts: Int,
+        val done: Long,
+        val total: Long,
+    ) : ImageInstallEvent()
     data object Verifying : ImageInstallEvent()
     data object Extracting : ImageInstallEvent()
     data class Complete(val version: String) : ImageInstallEvent()
@@ -67,6 +84,7 @@ class ImageRuntimeInstaller(
                 callback(ImageInstallEvent.Extracting)
                 extractSafely(part, base)
                 restoreRuntimePermissions(base)
+                installPrivatePythonRuntime(base)
                 File(base, ".rin_runtime_version").writeText(version)
                 part.delete()
                 val status = runtime.inspect(base)
@@ -154,6 +172,33 @@ class ImageRuntimeInstaller(
         }
     }
 
+    private fun installPrivatePythonRuntime(base: File) {
+        val source = File(base, "py_runtime")
+        if (!source.isDirectory) return
+        val target = File(context.filesDir, "py_runtime")
+        val staging = File(context.filesDir, ".py_runtime_install")
+        val backup = File(context.filesDir, ".py_runtime_previous")
+        staging.deleteRecursively()
+        backup.deleteRecursively()
+        check(source.copyRecursively(staging, overwrite = true)) { "Failed to stage private Python runtime" }
+        require(File(staging, "usr/bin/python3").isFile) { "Staged Python runtime is missing usr/bin/python3" }
+        if (target.exists()) {
+            check(target.renameTo(backup)) { "Failed to rotate existing private Python runtime" }
+        }
+        if (!staging.renameTo(target)) {
+            target.deleteRecursively()
+            if (!staging.copyRecursively(target, overwrite = true)) {
+                target.deleteRecursively()
+                if (backup.exists()) backup.renameTo(target)
+                error("Failed to install private Python runtime")
+            }
+            staging.deleteRecursively()
+        }
+        File(target, "usr/bin").listFiles()?.filter { it.isFile }?.forEach { it.setExecutable(true, false) }
+        require(File(target, "usr/bin/python3").isFile) { "Private Python runtime install completed without python3" }
+        backup.deleteRecursively()
+    }
+
     private fun restoreRuntimePermissions(base: File) {
         listOf(
             File(base, "bin"),
@@ -166,7 +211,7 @@ class ImageRuntimeInstaller(
         connectTimeout = 15_000
         readTimeout = 60_000
         instanceFollowRedirects = true
-        setRequestProperty("User-Agent", "Rin-NPU-Agent/1.5")
+        setRequestProperty("User-Agent", "Rin-NPU-Agent/1.5.2")
         if (rangeStart > 0) setRequestProperty("Range", "bytes=$rangeStart-")
         connect()
     }

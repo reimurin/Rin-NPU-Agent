@@ -40,6 +40,7 @@ class ImageModeController(
     }.getOrDefault(AppMode.CHAT)
     private var lastGeneratedFile: File? = null
     private var lastRuntimeStatus: ImageRuntimeStatus? = null
+    @Volatile private var autoContextRepairRequested = false
     private val resolutions = ImageGenerationRuntime.UI_RESOLUTIONS
 
     fun setup() {
@@ -51,11 +52,27 @@ class ImageModeController(
 
     fun onResume() {
         if (currentMode == AppMode.IMAGE) refreshRuntimeStatus(false)
+        if (prefs.getBoolean(KEY_BROWSER_PENDING, false) && !installer.isBusy()) resumeBrowserImport()
     }
 
     fun dispose() {
         installer.cancel()
+        RuntimeDownloadForegroundService.stop(activity)
         runtime.stop()
+    }
+
+    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != REQUEST_RUNTIME_DOWNLOAD_DIR) return false
+        if (resultCode == Activity.RESULT_OK) {
+            val uri = data?.data
+            if (uri != null) {
+                val readFlags = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
+                runCatching { activity.contentResolver.takePersistableUriPermission(uri, readFlags) }
+                prefs.edit().putString(KEY_BROWSER_TREE_URI, uri.toString()).putBoolean(KEY_BROWSER_PENDING, true).apply()
+                openBrowserReleasePage()
+            }
+        }
+        return true
     }
 
     private fun setupSpinners() {
@@ -112,7 +129,7 @@ class ImageModeController(
         binding.btnPositivePresetSelect.setOnClickListener { selectPositivePreset() }
         binding.btnNegativePresetSelect.setOnClickListener { selectNegativePreset() }
         binding.btnImageInstallRuntime.setOnClickListener {
-            if (runtime.hasStorageAccess()) startRuntimeInstall() else requestAllFilesAccess()
+            if (runtime.hasStorageAccess()) showRuntimeInstallOptions() else requestAllFilesAccess()
         }
         binding.btnImageCheckRuntime.setOnClickListener {
             if (runtime.hasStorageAccess()) refreshRuntimeStatus(true) else requestAllFilesAccess()
@@ -160,6 +177,12 @@ class ImageModeController(
             activity.runOnUiThread {
                 lastRuntimeStatus = status
                 binding.tvImageRuntimeStatus.text = runtimeStatusText(status)
+                if (runtime.hasKnownBadClipG() && !installer.isBusy() && !autoContextRepairRequested) {
+                    autoContextRepairRequested = true
+                    binding.tvImageRuntimeStatus.text = "检测到旧版 CLIP-G 上下文，正在自动修复…"
+                    startAcceleratedRuntimeInstall()
+                    return@runOnUiThread
+                }
                 binding.tvImageRuntimeStatus.setTextColor(
                     ContextCompat.getColor(activity, if (status.ready) R.color.rin_success else R.color.rin_warning),
                 )
@@ -170,19 +193,54 @@ class ImageModeController(
         }, "rin-image-runtime-check").start()
     }
 
-    private fun startRuntimeInstall() {
+    private fun showRuntimeInstallOptions() {
         val current = runtime.inspect()
         if (current.ready) {
             Toast.makeText(activity, R.string.image_runtime_ready, Toast.LENGTH_SHORT).show()
             return
         }
+        val items = arrayOf(activity.getString(R.string.runtime_download_mode_app), activity.getString(R.string.runtime_download_mode_browser))
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.runtime_download_mode_title)
+            .setItems(items) { _, which -> if (which == 0) startAcceleratedRuntimeInstall() else startBrowserDownloadFlow() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startAcceleratedRuntimeInstall() {
         binding.btnImageInstallRuntime.isEnabled = false
         binding.imageRuntimeInstallProgress.visibility = View.VISIBLE
         binding.imageRuntimeInstallProgress.isIndeterminate = true
+        RuntimeDownloadForegroundService.start(activity)
         val started = installer.install(::handleInstallEvent)
         if (!started) {
+            RuntimeDownloadForegroundService.stop(activity)
             binding.btnImageInstallRuntime.isEnabled = true
             Toast.makeText(activity, R.string.image_runtime_install_running, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun startBrowserDownloadFlow() {
+        prefs.edit().putBoolean(KEY_BROWSER_PENDING, true).apply()
+        openBrowserReleasePage()
+    }
+
+    private fun openBrowserReleasePage() {
+        binding.tvImageRuntimeStatus.setText(R.string.runtime_browser_opened)
+        runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GitHubImageRuntimeInstaller.RELEASE_PAGE_URL))) }
+            .onFailure { Toast.makeText(activity, it.message ?: "Browser launch failed", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun resumeBrowserImport() {
+        if (!runtime.hasStorageAccess() || installer.isBusy()) return
+        binding.btnImageInstallRuntime.isEnabled = false
+        binding.imageRuntimeInstallProgress.visibility = View.VISIBLE
+        binding.imageRuntimeInstallProgress.isIndeterminate = true
+        RuntimeDownloadForegroundService.start(activity, activity.getString(R.string.runtime_browser_scanning))
+        val started = installer.importFromPublicDownloads(::handleInstallEvent)
+        if (!started) {
+            RuntimeDownloadForegroundService.stop(activity)
+            binding.btnImageInstallRuntime.isEnabled = true
         }
     }
 
@@ -193,46 +251,98 @@ class ImageModeController(
                     binding.imageRuntimeInstallProgress.visibility = View.VISIBLE
                     binding.imageRuntimeInstallProgress.isIndeterminate = true
                     binding.tvImageRuntimeStatus.setText(R.string.image_runtime_install_checking)
+                    RuntimeDownloadForegroundService.update(activity, 0, binding.tvImageRuntimeStatus.text.toString())
                 }
                 is ImageInstallEvent.Unavailable -> {
                     binding.imageRuntimeInstallProgress.visibility = View.GONE
                     binding.btnImageInstallRuntime.isEnabled = true
                     binding.tvImageRuntimeStatus.text = event.message
+                    RuntimeDownloadForegroundService.stop(activity)
                     Toast.makeText(activity, event.message, Toast.LENGTH_LONG).show()
                 }
                 is ImageInstallEvent.Downloading -> {
+                    binding.imageRuntimeInstallProgress.visibility = View.VISIBLE
                     binding.imageRuntimeInstallProgress.isIndeterminate = false
                     binding.imageRuntimeInstallProgress.setProgressCompat(event.percent, true)
-                    binding.tvImageRuntimeStatus.text = activity.getString(R.string.image_runtime_install_downloading, event.percent)
+                    val text = if (event.partCount > 0) {
+                        activity.getString(
+                            R.string.image_runtime_install_downloading_detail,
+                            event.partIndex, event.partCount,
+                            formatBytes(event.partDone), formatBytes(event.partTotal),
+                            formatSpeed(event.bytesPerSecond), formatEta(event.etaSeconds), event.threads,
+                        )
+                    } else {
+                        activity.getString(R.string.image_runtime_install_downloading, event.percent)
+                    }
+                    binding.tvImageRuntimeStatus.text = text
+                    RuntimeDownloadForegroundService.update(activity, event.percent, text)
+                }
+                is ImageInstallEvent.BrowserWaiting -> {
+                    val percent = if (event.total > 0L) ((event.done * 100L) / event.total).toInt().coerceIn(0, 100) else 0
+                    binding.imageRuntimeInstallProgress.visibility = View.VISIBLE
+                    binding.imageRuntimeInstallProgress.isIndeterminate = false
+                    binding.imageRuntimeInstallProgress.setProgressCompat(percent, true)
+                    binding.tvImageRuntimeStatus.text = activity.getString(
+                        R.string.runtime_browser_waiting,
+                        event.foundParts, event.totalParts, formatBytes(event.done), formatBytes(event.total),
+                    )
+                    binding.btnImageInstallRuntime.isEnabled = true
+                    RuntimeDownloadForegroundService.stop(activity)
                 }
                 ImageInstallEvent.Verifying -> {
                     binding.imageRuntimeInstallProgress.isIndeterminate = true
                     binding.tvImageRuntimeStatus.setText(R.string.image_runtime_install_verifying)
+                    RuntimeDownloadForegroundService.update(activity, binding.imageRuntimeInstallProgress.progress, binding.tvImageRuntimeStatus.text.toString())
                 }
                 ImageInstallEvent.Extracting -> {
                     binding.imageRuntimeInstallProgress.isIndeterminate = true
                     binding.tvImageRuntimeStatus.setText(R.string.image_runtime_install_extracting)
+                    RuntimeDownloadForegroundService.update(activity, 100, binding.tvImageRuntimeStatus.text.toString())
                 }
                 is ImageInstallEvent.Complete -> {
+                    autoContextRepairRequested = false
+                    prefs.edit().putBoolean(KEY_BROWSER_PENDING, false).apply()
                     binding.imageRuntimeInstallProgress.visibility = View.GONE
                     binding.btnImageInstallRuntime.isEnabled = true
+                    RuntimeDownloadForegroundService.stop(activity)
                     Toast.makeText(activity, activity.getString(R.string.image_runtime_install_complete, event.version), Toast.LENGTH_LONG).show()
                     refreshRuntimeStatus(false)
                 }
                 is ImageInstallEvent.Failure -> {
+                    autoContextRepairRequested = false
                     binding.imageRuntimeInstallProgress.visibility = View.GONE
                     binding.btnImageInstallRuntime.isEnabled = true
                     binding.tvImageRuntimeStatus.text = activity.getString(R.string.image_runtime_install_failed, event.message)
+                    RuntimeDownloadForegroundService.stop(activity)
                     Toast.makeText(activity, binding.tvImageRuntimeStatus.text, Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
 
+    private fun formatBytes(bytes: Long): String {
+        val value = bytes.coerceAtLeast(0L).toDouble()
+        return when {
+            value >= 1073741824.0 -> String.format(Locale.US, "%.2f GiB", value / 1073741824.0)
+            value >= 1048576.0 -> String.format(Locale.US, "%.1f MiB", value / 1048576.0)
+            value >= 1024.0 -> String.format(Locale.US, "%.1f KiB", value / 1024.0)
+            else -> "${bytes.coerceAtLeast(0L)} B"
+        }
+    }
+
+    private fun formatSpeed(bytesPerSecond: Long): String = if (bytesPerSecond > 0L) formatBytes(bytesPerSecond) + "/s" else "—"
+
+    private fun formatEta(seconds: Long): String = when {
+        seconds < 0L -> "—"
+        seconds < 60L -> "${seconds}s"
+        seconds < 3600L -> String.format(Locale.US, "%d:%02d", seconds / 60L, seconds % 60L)
+        else -> String.format(Locale.US, "%d:%02d:%02d", seconds / 3600L, (seconds % 3600L) / 60L, seconds % 60L)
+    }
+
     private fun runtimeStatusText(status: ImageRuntimeStatus): String = when {
         !status.storagePermission -> activity.getString(R.string.runtime_permission_needed)
         status.pythonPath == null -> activity.getString(R.string.runtime_python_missing)
-        !status.pythonDependenciesOk -> activity.getString(R.string.runtime_python_missing) + " · numpy/Pillow"
+        !status.pythonDependenciesOk -> status.detail ?: (activity.getString(R.string.runtime_python_missing) + " · numpy/Pillow")
         status.missingCommonFiles.isNotEmpty() || status.availableResolutions.isEmpty() ->
             activity.getString(R.string.runtime_context_missing) + " · " + status.missingCommonFiles.take(3).joinToString(", ")
         else -> activity.getString(R.string.image_runtime_ready) + " · " + status.availableResolutions.joinToString { it.key } +
@@ -466,5 +576,8 @@ class ImageModeController(
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_NEGATIVE_LOCKED = "negative_locked"
         private const val KEY_LIVE_PREVIEW = "live_preview"
+        private const val KEY_BROWSER_TREE_URI = "browser_runtime_tree_uri"
+        private const val KEY_BROWSER_PENDING = "browser_runtime_pending"
+        const val REQUEST_RUNTIME_DOWNLOAD_DIR = 3302
     }
 }

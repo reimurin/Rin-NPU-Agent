@@ -234,4 +234,16 @@
     <string name="image_runtime_install_extracting">Installing image runtime…</string>
     <string name="image_runtime_install_complete">Image runtime %1$s installed successfully</string>
     <string name="image_runtime_install_failed">Image runtime setup failed: %1$s</string>
+
+    <string name="runtime_download_mode_title">Choose runtime download method</string>
+    <string name="runtime_download_mode_app">App accelerated download · 8 threads · resumable</string>
+    <string name="runtime_download_mode_browser">Browser download · use system browser</string>
+    <string name="runtime_browser_choose_download_folder">Select the system Download folder once so Rin can detect browser downloads automatically.</string>
+    <string name="runtime_browser_opened">Browser opened. Download part01–part04, then return to Rin.</string>
+    <string name="runtime_browser_scanning">Scanning browser downloads…</string>
+    <string name="runtime_browser_waiting">Browser download · %1$d/%2$d parts ready · %3$s/%4$s. Finish downloads, then return to Rin.</string>
+    <string name="image_runtime_install_downloading_detail">Part %1$d/%2$d · %3$s/%4$s · %5$s · ETA %6$s · %7$d threads</string>
+    <string name="runtime_download_notification_channel">Image runtime downloads</string>
+    <string name="runtime_download_notification_channel_desc">Background download and installation progress for the local image runtime</string>
+    <string name="runtime_download_notification_title">Rin image runtime</string>
 </resources>

@@ -2,7 +2,7 @@
 
 面向 Snapdragon NPU 的 Android ARM64 本地 AI 工作空间，将本地 LLM/VLM 对话、项目级 Agent、多项目多会话，以及 WAI/SDXL 生图工作台整合在同一个应用中。
 
-**当前开发版本线：** `1.5.1` · 包名 `com.geniex.demo` · `arm64-v8a`
+**当前稳定版本：** `1.5.11` · 包名 `com.geniex.demo` · `arm64-v8a`
 
 ## 主要功能
 
@@ -30,7 +30,7 @@
 - 对话模型与 SDXL 之间进行内存交接。
 - 根据手机硬件自动选择预编译 NPU 生图包。
 
-首个 **SM8750** WAI 预编译包正在制作。发布后会进入仓库模型目录，手机端自动识别并安装。
+SM8750 生图包已发布，1.5.11 已由项目使用者在荣耀 Magic 7 Pro 上确认生图成功。见 [正式 Release](https://github.com/reimurin/Rin-NPU-Agent/releases/tag/v1.5.11) 和 [版本说明](docs/RELEASE_1.5.11.md)。
 
 ## 模型包目录
 
@@ -42,7 +42,7 @@ https://raw.githubusercontent.com/reimurin/Rin-NPU-Agent/main/models/index.json
 
 每个包记录兼容芯片、ABI、runtime、分辨率、压缩包 SHA-256 与 GitHub Release 资产。APP 根据当前手机 SoC/ABI 自动选择最匹配的已发布包。
 
-QNN context 体积较大，模型文件放在 **GitHub Release**，不进入 Git 历史。GitHub Release 单个资产需小于 2 GiB，因此大包按顺序分卷。手机端逐卷下载、逐卷 SHA-256 校验，再重组 ZIP、校验完整包并安装。
+QNN context 体积较大，模型文件放在 **GitHub Release**，不进入 Git 历史。GitHub Release 单个资产需小于 2 GiB，因此大包按顺序分卷。手机端逐卷下载、逐卷 SHA-256 校验，通过连续分卷流校验完整 ZIP 并直接解压。CLIP-G 修复按独立组件下载，不重下全部模型。
 
 以后增加新的 Snapdragon 芯片、分辨率或 QNN profile，只需要发布新模型包并更新 `models/index.json`，APK 的目录地址保持不变。
 
@@ -96,8 +96,10 @@ SDXL/QNN 手机端路线参考并整合了 Model-To-NPU：
 
 ## 下一步
 
-- 发布首个 SM8750 WAI SDXL QNN 模型包。
+- 1.5.11 保留为已验证的稳定基线。
 - 增加更多分辨率 bucket 和 Snapdragon 芯片目标。
 - 加入按需加载的小型 Prompt 扩写模型，生成后立即卸载再进入 SDXL。
 - 根据触发词自动发现 LoRA，并切换 QNN context slot。
 - 后续页面和控件继续遵守 Rin Design System 的 integrity 规则。
+
+1.6 的范围、分阶段验收和 LoRA/预览实现方案见 [1.6 计划](docs/PLAN_1.6.md)。

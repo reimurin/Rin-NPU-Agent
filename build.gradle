@@ -18,8 +18,8 @@ android {
         applicationId 'com.geniex.demo'
         minSdk 31
         targetSdk 34
-        versionCode 7
-        versionName '1.5.1'
+        versionCode 17
+        versionName '1.5.11'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -43,6 +43,29 @@ android {
     }
     packaging {
         jniLibs.useLegacyPackaging = true
+        jniLibs.pickFirsts += [
+            'lib/arm64-v8a/libQnnHtp.so',
+            'lib/arm64-v8a/libQnnHtpNetRunExtensions.so',
+            'lib/arm64-v8a/libQnnHtpPrepare.so',
+            'lib/arm64-v8a/libQnnHtpProfilingReader.so',
+            'lib/arm64-v8a/libQnnHtpV79Stub.so',
+            'lib/arm64-v8a/libQnnHtpV79.so',
+            'lib/arm64-v8a/libQnnHtpV79Skel.so',
+            '**/libQnnHtpV79.so',
+            '**/libQnnHtpV79Skel.so',
+            'lib/arm64-v8a/libQnnSystem.so',
+        ]
+        jniLibs.keepDebugSymbols += [
+            'lib/arm64-v8a/libQnnHtp.so',
+            'lib/arm64-v8a/libQnnHtpNetRunExtensions.so',
+            'lib/arm64-v8a/libQnnHtpPrepare.so',
+            'lib/arm64-v8a/libQnnHtpProfilingReader.so',
+            'lib/arm64-v8a/libQnnHtpV79Stub.so',
+            'lib/arm64-v8a/libQnnHtpV79.so',
+            'lib/arm64-v8a/libQnnHtpV79Skel.so',
+            'lib/arm64-v8a/libQnnSystem.so',
+            'lib/arm64-v8a/librinqnnnetrun.so',
+        ]
     }
 
     buildFeatures {
