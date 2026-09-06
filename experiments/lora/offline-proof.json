@@ -1,0 +1,39 @@
+{
+  "scope": "tiny CPU ONNX and offline SM8750 HTP compilation; no phone inference",
+  "onnx_numeric_checks": [
+    {
+      "strength": 0,
+      "max_abs_error": 0.0
+    },
+    {
+      "strength": 0.8,
+      "max_abs_error": 5.960464477539063e-08
+    },
+    {
+      "strength": 1.1,
+      "max_abs_error": 5.960464477539063e-08
+    },
+    {
+      "strength": -0.4,
+      "max_abs_error": 5.960464477539063e-08
+    },
+    {
+      "strength": 0,
+      "max_abs_error": 0.0
+    }
+  ],
+  "CONVERT_UPDATEABLE_rc": 0,
+  "updateable_static_tensors": [
+    "lora_A",
+    "lora_B"
+  ],
+  "context_bytes": 50096,
+  "CONTEXT_INFO_rc": 0,
+  "outcome": "offline_updateable_context_created",
+  "contract_checks": {
+    "passed": 41,
+    "total": 41
+  },
+  "phone_validated": false,
+  "adapter_binary_applied": false
+}
