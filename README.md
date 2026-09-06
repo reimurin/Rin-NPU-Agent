@@ -1,3 +1,5 @@
+> This branch builds the isolated 1.6.0-alpha.1 LoRA Lab, not a WAI-LoRA-ready release. See [alpha test instructions](docs/RELEASE_1.6.0-alpha.1.md) and [local build dependencies](docs/BUILD_LORA_ALPHA.md). Stable image generation remains v1.5.11.
+
 # Rin NPU Agent
 
 [简体中文](README.zh-CN.md)

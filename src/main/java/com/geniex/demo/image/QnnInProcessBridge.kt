@@ -16,6 +16,8 @@ internal object QnnInProcessNative {
         System.loadLibrary("rinqnnbridge")
     }
 
+    external fun runLoraSequence(backendPath: String, systemLibraryPath: String, contextPath: String, inputListPath: String, outputDir: String, nativeInput: Boolean, nativeOutput: Boolean, testRoot: String, applyBinaryAdapters: Boolean): String
+
     external fun runContext(
         backendPath: String,
         systemLibraryPath: String,
@@ -80,7 +82,7 @@ internal class QnnInProcessBridgeServer(
         return this
     }
 
-    private fun configureAndPreload(): String {
+    internal fun configureAndPreload(): String {
         val nativeDir = File(context.applicationInfo.nativeLibraryDir).absolutePath
         val modelLib = File(baseDir, "lib").absolutePath
         val adsp = listOf(

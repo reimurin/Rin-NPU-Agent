@@ -15,11 +15,11 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId 'com.geniex.demo'
+        applicationId 'com.geniex.demo.loratest'
         minSdk 31
         targetSdk 34
-        versionCode 17
-        versionName '1.5.11'
+        versionCode 18
+        versionName '1.6.0-alpha.1'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -79,6 +79,8 @@ android {
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
     // GenieX Android binding (published to Maven Central).
     implementation 'com.qualcomm.qti:geniex-android:0.3.5'
 

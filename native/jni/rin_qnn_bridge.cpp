@@ -308,3 +308,213 @@ cleanup:
                       elapsedMs());
   return makeResult(env, ok, stage, detail, elapsedMs(), backendBuild, operationLog);
 }
+
+// Isolated 1.6 LoRA sequence self-test. The normal generation entry is unchanged.
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_geniex_demo_image_QnnInProcessNative_runLoraSequence(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jstring backendPathJ,
+    jstring systemLibraryPathJ,
+    jstring contextPathJ,
+    jstring inputListPathJ,
+    jstring outputDirJ,
+    jboolean nativeInput,
+    jboolean nativeOutput,
+    jstring testRootJ,
+    jboolean applyBinaryAdapters) {
+  std::lock_guard<std::mutex> lock(gRunMutex);
+  const auto started = std::chrono::steady_clock::now();
+  clearNativeLog();
+
+  const std::string backendPath = JUtfString(env, backendPathJ).str();
+  const std::string systemLibraryPath = JUtfString(env, systemLibraryPathJ).str();
+  const std::string contextPath = JUtfString(env, contextPathJ).str();
+  const std::string inputListPath = JUtfString(env, inputListPathJ).str();
+  const std::string outputDir = JUtfString(env, outputDirJ).str();
+  const std::string testRoot = JUtfString(env, testRootJ).str();
+
+  auto elapsedMs = [&]() -> double {
+    return std::chrono::duration<double, std::milli>(
+               std::chrono::steady_clock::now() - started)
+        .count();
+  };
+
+  if (backendPath.empty() || systemLibraryPath.empty() || contextPath.empty() ||
+      inputListPath.empty() || outputDir.empty()) {
+    return makeResult(env, false, "arguments", "missing required path", elapsedMs(), "", nativeLogTail());
+  }
+
+  std::call_once(gLogInitOnce, []() {
+    gLogReady = qnn::log::initializeLogging(rinQnnLogCallback, QNN_LOG_LEVEL_VERBOSE);
+  });
+  if (!gLogReady) {
+    return makeResult(env, false, "logging", "QNN logging initialization failed", elapsedMs(), "", nativeLogTail());
+  }
+
+  using qnn::tools::dynamicloadutil::StatusCode;
+  using AppStatus = qnn::tools::sample_app::StatusCode;
+
+  qnn::tools::sample_app::QnnFunctionPointers qnnFunctionPointers{};
+  void* backendHandle = nullptr;
+  void* modelHandle = nullptr;
+  std::unique_ptr<qnn::tools::sample_app::QnnSampleApp> app;
+  bool deviceCreated = false;
+  bool contextCreated = false;
+  AppStatus devicePropertySupportStatus = AppStatus::FAILURE;
+  std::string backendBuild;
+  std::string stage = "load_backend";
+  std::string detail;
+  std::string operationLog;
+  bool ok = false;
+
+  __android_log_print(ANDROID_LOG_INFO, kTag, "runContext ctx=%s", contextPath.c_str());
+
+  auto loadStatus = qnn::tools::dynamicloadutil::getQnnFunctionPointers(
+      backendPath,
+      "",
+      &qnnFunctionPointers,
+      &backendHandle,
+      false,
+      &modelHandle);
+  if (loadStatus != StatusCode::SUCCESS) {
+    detail = "getQnnFunctionPointers failed=" + std::to_string(static_cast<int>(loadStatus));
+    goto cleanup;
+  }
+
+  stage = "load_system";
+  loadStatus = qnn::tools::dynamicloadutil::getQnnSystemFunctionPointers(
+      systemLibraryPath, &qnnFunctionPointers);
+  if (loadStatus != StatusCode::SUCCESS) {
+    detail = "getQnnSystemFunctionPointers failed=" + std::to_string(static_cast<int>(loadStatus));
+    goto cleanup;
+  }
+
+  stage = "construct";
+  app = std::make_unique<qnn::tools::sample_app::QnnSampleApp>(
+      qnnFunctionPointers,
+      inputListPath,
+      "",
+      backendHandle,
+      outputDir,
+      false,
+      nativeOutput == JNI_TRUE ? qnn::tools::iotensor::OutputDataType::NATIVE_ONLY
+                               : qnn::tools::iotensor::OutputDataType::FLOAT_ONLY,
+      nativeInput == JNI_TRUE ? qnn::tools::iotensor::InputDataType::NATIVE
+                              : qnn::tools::iotensor::InputDataType::FLOAT,
+      qnn::tools::sample_app::ProfilingLevel::OFF,
+      true,
+      contextPath,
+      "",
+      1,
+      false,
+      "");
+  backendBuild = app->getBackendBuildId();
+
+  stage = "initialize";
+  if (app->initialize() != AppStatus::SUCCESS) {
+    detail = "QnnSampleApp::initialize failed";
+    goto cleanup;
+  }
+
+  stage = "initialize_backend";
+  if (app->initializeBackend() != AppStatus::SUCCESS) {
+    detail = "QnnSampleApp::initializeBackend failed";
+    goto cleanup;
+  }
+
+  stage = "device_property";
+  devicePropertySupportStatus = app->isDevicePropertySupported();
+  if (devicePropertySupportStatus != AppStatus::FAILURE) {
+    stage = "create_device";
+    deviceCreated = (app->createDevice() == AppStatus::SUCCESS);
+    if (!deviceCreated) {
+      detail = "QnnSampleApp::createDevice failed";
+      goto cleanup;
+    }
+  }
+
+  stage = "profiling";
+  if (app->initializeProfiling() != AppStatus::SUCCESS) {
+    detail = "QnnSampleApp::initializeProfiling failed";
+    goto cleanup;
+  }
+
+  stage = "op_packages";
+  if (app->registerOpPackages() != AppStatus::SUCCESS) {
+    detail = "QnnSampleApp::registerOpPackages failed";
+    goto cleanup;
+  }
+
+  stage = "create_from_binary";
+  contextCreated = (app->createFromBinary() == AppStatus::SUCCESS);
+  if (!contextCreated) {
+    detail = "QnnSampleApp::createFromBinary failed";
+    goto cleanup;
+  }
+
+  if (app->isFinalizeDeserializedGraphSupported() == AppStatus::SUCCESS) {
+    stage = "finalize_graphs";
+    if (app->finalizeGraphs() != AppStatus::SUCCESS) {
+      detail = "QnnSampleApp::finalizeGraphs failed";
+      goto cleanup;
+    }
+  }
+
+  {
+    const char* cases[] = {"base0", "original08", "original11", "changed08", "restored08", "restored0", "zero11"};
+    const char* adapters[] = {"", "tiny_original.bin", "", "tiny_changed.bin", "tiny_original.bin", "", "tiny_zero.bin"};
+    for (size_t i = 0; i < 7; ++i) {
+      stage = std::string("lora_io_") + cases[i];
+      if (app->rinSetRunIO(testRoot + "/" + cases[i] + "/inputs.txt", outputDir + "/" + cases[i]) != AppStatus::SUCCESS) {
+        detail = app->getLastExecutionDetail(); goto cleanup;
+      }
+      if (*adapters[i] && applyBinaryAdapters == JNI_TRUE) {
+        stage = std::string("lora_apply_") + cases[i];
+        if (app->rinApplyAdapter(testRoot + "/assets/" + adapters[i]) != AppStatus::SUCCESS) {
+          detail = app->getLastExecutionDetail(); goto cleanup;
+        }
+      }
+      stage = std::string("lora_execute_") + cases[i];
+      if (app->executeGraphs(false) != AppStatus::SUCCESS) {
+        detail = app->getLastExecutionDetail(); goto cleanup;
+      }
+    }
+  }
+
+  stage = "complete";
+  ok = true;
+
+cleanup:
+  operationLog = nativeLogTail();  // Preserve the failure before cleanup floods the log.
+  if (app) {
+    app->rinReleaseGraphMetadata();
+    if (contextCreated) {
+      app->freeContext();
+      contextCreated = false;
+    }
+    if (deviceCreated && devicePropertySupportStatus != AppStatus::FAILURE) {
+      app->freeDevice();
+      deviceCreated = false;
+    }
+    app->terminateBackend();
+    app.reset();
+  }
+  if (backendHandle) {
+    pal::dynamicloading::dlClose(backendHandle);
+    backendHandle = nullptr;
+  }
+  if (modelHandle) {
+    pal::dynamicloading::dlClose(modelHandle);
+    modelHandle = nullptr;
+  }
+
+  __android_log_print(ok ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR,
+                      kTag,
+                      "result ok=%d stage=%s detail=%s elapsed=%.1fms",
+                      ok ? 1 : 0,
+                      stage.c_str(),
+                      detail.c_str(),
+                      elapsedMs());
+  return makeResult(env, ok, stage, detail, elapsedMs(), backendBuild, operationLog);
+}

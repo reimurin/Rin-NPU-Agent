@@ -1,0 +1,93 @@
+--- a/qnn-native-sdk-2.48/qairt/2.48.0.260626/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.hpp
++++ b/qnn-native-sdk-2.48/qairt/2.48.0.260626/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.hpp
+@@ -67,7 +67,10 @@
+ 
+   StatusCode finalizeGraphs();
+ 
+-  StatusCode executeGraphs();
++  StatusCode executeGraphs(bool releaseMetadata = true);
++  StatusCode rinSetRunIO(const std::string& inputList, const std::string& outputPath);
++  StatusCode rinApplyAdapter(const std::string& adapterPath);
++  void rinReleaseGraphMetadata();
+ 
+   StatusCode registerOpPackages();
+ 
+@@ -143,6 +146,7 @@
+   QnnSystemProfile_SerializationTargetHandle_t m_serializationTargetHandle = nullptr;
+ 
+   std::string m_lastExecutionDetail;
++  std::vector<std::vector<uint8_t>> m_rinAdapterBuffers;
+ 
+   std::string m_dlcPath;
+   QnnSystemDlc_Handle_t m_dlcHandle = nullptr;
+--- a/qnn-native-sdk-2.48/qairt/2.48.0.260626/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.cpp
++++ b/qnn-native-sdk-2.48/qairt/2.48.0.260626/examples/QNN/SampleApp/SampleApp/src/QnnSampleApp.cpp
+@@ -805,7 +805,7 @@
+ // executeGraphs() that is currently used by qnn-sample-app's main.cpp.
+ // This function runs all the graphs present in model.so by reading
+ // inputs from input_list based files and writes output to .raw files.
+-sample_app::StatusCode sample_app::QnnSampleApp::executeGraphs() {
++sample_app::StatusCode sample_app::QnnSampleApp::executeGraphs(bool releaseMetadata) {
+   auto returnStatus = StatusCode::SUCCESS;
+   m_lastExecutionDetail.clear();
+   for (unsigned int run = 0; run < m_numInferences; run++) {
+@@ -876,8 +876,57 @@
+       if (StatusCode::SUCCESS != returnStatus) break;
+     }
+   }
+-  qnn_wrapper_api::freeGraphsInfo(&m_graphsInfo, m_graphsCount);
+-  m_graphsInfo = nullptr;
++  if (releaseMetadata) rinReleaseGraphMetadata();
+   if (StatusCode::SUCCESS == returnStatus) m_lastExecutionDetail = "ok";
+   return returnStatus;
+ }
++
++void sample_app::QnnSampleApp::rinReleaseGraphMetadata() {
++  if (m_graphsInfo) {
++    qnn_wrapper_api::freeGraphsInfo(&m_graphsInfo, m_graphsCount);
++    m_graphsInfo = nullptr;
++  }
++}
++sample_app::StatusCode sample_app::QnnSampleApp::rinSetRunIO(const std::string& inputList, const std::string& outputPath) {
++  bool valid = false;
++  std::vector<std::string> paths{inputList};
++  auto parsed = readInputLists(paths);
++  if (!std::get<2>(parsed) || !pal::Directory::makePath(outputPath)) {
++    m_lastExecutionDetail = "lora_test_io_invalid";
++    return StatusCode::FAILURE;
++  }
++  m_inputListPaths = paths;
++  m_inputFileLists = std::move(std::get<0>(parsed));
++  m_inputNameToIndex = std::move(std::get<1>(parsed));
++  m_outputPath = outputPath;
++  return StatusCode::SUCCESS;
++}
++sample_app::StatusCode sample_app::QnnSampleApp::rinApplyAdapter(const std::string& path) {
++  if (!m_context || !m_graphsInfo || m_graphsCount != 1 || !m_qnnFunctionPointers.qnnInterface.contextApplyBinarySection) {
++    m_lastExecutionDetail = "adapter_api_or_context_missing";
++    return StatusCode::FAILURE;
++  }
++  std::ifstream input(path, std::ios::binary | std::ios::ate);
++  const auto size = input ? input.tellg() : std::streampos(-1);
++  if (size <= 0 || size > std::streampos(512ULL * 1024 * 1024)) {
++    m_lastExecutionDetail = "adapter_file_invalid";
++    return StatusCode::FAILURE;
++  }
++  m_rinAdapterBuffers.emplace_back(static_cast<size_t>(size));
++  auto& bytes = m_rinAdapterBuffers.back();
++  input.seekg(0);
++  if (!input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()))) {
++    m_lastExecutionDetail = "adapter_file_read_failed";
++    return StatusCode::FAILURE;
++  }
++  QnnContext_Buffer_t buffer{};
++  buffer.version = QNN_CONTEXT_BUFFER_VERSION_1;
++  buffer.v1.memType = QNN_CONTEXTMEMTYPE_RAW;
++  buffer.v1.binaryBuf.data = bytes.data();
++  buffer.v1.binaryBuf.dataSize = bytes.size();
++  const auto rc = m_qnnFunctionPointers.qnnInterface.contextApplyBinarySection(
++      m_context, (*m_graphsInfo)[0].graph, QNN_CONTEXT_SECTION_UPDATABLE, &buffer, nullptr, nullptr);
++  QNN_INFO("RIN_LORA_APPLY bytes=%zu code=%llu", bytes.size(), static_cast<unsigned long long>(rc));
++  m_lastExecutionDetail = "adapter_apply code=" + std::to_string(static_cast<unsigned long long>(rc));
++  return rc == QNN_SUCCESS ? StatusCode::SUCCESS : StatusCode::FAILURE;
++}

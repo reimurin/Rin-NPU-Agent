@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "scope": "synthetic SM8750 V79 adapter sequence; not a WAI LoRA compatibility claim",
+  "soc": 69,
+  "dsp": 79,
+  "assets": [
+    {
+      "name": "base0.alpha.raw",
+      "bytes": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+    },
+    {
+      "name": "base0.expected.raw",
+      "bytes": 64,
+      "sha256": "40ea8f94c1788af31cbe8e8ccdb1aeda049c07d36b2954bbb13f641259cd13cb"
+    },
+    {
+      "name": "changed08.alpha.raw",
+      "bytes": 4,
+      "sha256": "030a1a64b337c633d995221728d15e8b0d086cc0dcf4557205111b089b04464d"
+    },
+    {
+      "name": "changed08.expected.raw",
+      "bytes": 64,
+      "sha256": "99a40c5a19e4096d67c4f476625f7faa70ee4da8f188e16e1c833752cabb9902"
+    },
+    {
+      "name": "original08.alpha.raw",
+      "bytes": 4,
+      "sha256": "030a1a64b337c633d995221728d15e8b0d086cc0dcf4557205111b089b04464d"
+    },
+    {
+      "name": "original08.expected.raw",
+      "bytes": 64,
+      "sha256": "ae1af4612c01c7ab9da32ecce380c227f4bd15e8e3f9036fa27b7d421af90fd4"
+    },
+    {
+      "name": "original11.alpha.raw",
+      "bytes": 4,
+      "sha256": "e7d9a957c3c942d3551b291f30acbb11064e373eb6adcf4dc54671f8a64f965f"
+    },
+    {
+      "name": "original11.expected.raw",
+      "bytes": 64,
+      "sha256": "92004e2da11c3ee5802b49ffbbbf672fed4a21c4e1d785a38a9249a2c40b535f"
+    },
+    {
+      "name": "restored0.alpha.raw",
+      "bytes": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+    },
+    {
+      "name": "restored0.expected.raw",
+      "bytes": 64,
+      "sha256": "40ea8f94c1788af31cbe8e8ccdb1aeda049c07d36b2954bbb13f641259cd13cb"
+    },
+    {
+      "name": "restored08.alpha.raw",
+      "bytes": 4,
+      "sha256": "030a1a64b337c633d995221728d15e8b0d086cc0dcf4557205111b089b04464d"
+    },
+    {
+      "name": "restored08.expected.raw",
+      "bytes": 64,
+      "sha256": "ae1af4612c01c7ab9da32ecce380c227f4bd15e8e3f9036fa27b7d421af90fd4"
+    },
+    {
+      "name": "sample.raw",
+      "bytes": 64,
+      "sha256": "188268261dd42de28aa6bb914cdb0d67980f3790ea5225a3dda9936cfd2181b3"
+    },
+    {
+      "name": "tiny.bin",
+      "bytes": 50096,
+      "sha256": "979946dfd0f5b28b5ab75d757f356bda0f461fa19e70b11b1d4bbc821a5d3383"
+    },
+    {
+      "name": "tiny_changed.bin",
+      "bytes": 25744,
+      "sha256": "eb4877dc51cbf49821c281da52dfd5e8945e4dbb0eddc04c7612fa943958d9b7"
+    },
+    {
+      "name": "tiny_original.bin",
+      "bytes": 25744,
+      "sha256": "32a5219a7349e6a50efb3876f9b4b3e6397efb9127c1b52b27dd181f0f9124d5"
+    },
+    {
+      "name": "tiny_zero.bin",
+      "bytes": 25744,
+      "sha256": "c48b34dedabbb605f60f031c3dd368ceb3dfe512c2acd9f334c3c65a084ac798"
+    },
+    {
+      "name": "zero11.alpha.raw",
+      "bytes": 4,
+      "sha256": "e7d9a957c3c942d3551b291f30acbb11064e373eb6adcf4dc54671f8a64f965f"
+    },
+    {
+      "name": "zero11.expected.raw",
+      "bytes": 64,
+      "sha256": "40ea8f94c1788af31cbe8e8ccdb1aeda049c07d36b2954bbb13f641259cd13cb"
+    }
+  ],
+  "cases": [
+    {
+      "name": "base0",
+      "alpha": 0,
+      "weights": "original",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    },
+    {
+      "name": "original08",
+      "alpha": 0.8,
+      "weights": "original",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    },
+    {
+      "name": "original11",
+      "alpha": 1.1,
+      "weights": "original",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    },
+    {
+      "name": "changed08",
+      "alpha": 0.8,
+      "weights": "changed",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    },
+    {
+      "name": "restored08",
+      "alpha": 0.8,
+      "weights": "original",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    },
+    {
+      "name": "restored0",
+      "alpha": 0,
+      "weights": "original",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    },
+    {
+      "name": "zero11",
+      "alpha": 1.1,
+      "weights": "zero",
+      "elements": 16,
+      "atol": 0.002,
+      "rtol": 0.02
+    }
+  ]
+}

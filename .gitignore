@@ -45,3 +45,6 @@ __pycache__/
 *.ttf
 *.otf
 qnn-native-sdk-2.48/
+
+/native/obj/
+/native/libs/

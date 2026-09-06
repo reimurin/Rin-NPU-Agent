@@ -1,6 +1,6 @@
 # Rin NPU Agent 1.6 计划
 
-日期：2026-09-06。状态：LoRA 离线原型已完成首轮测试，尚未接入手机 APP。稳定基线为用户已确认生图成功的 1.5.11 / code 17。正式版本号采用 1.6.0，后续修复使用 1.6.1 等命名。
+日期：2026-09-06。状态：1.6.0-alpha.1 独立测试 APP 已构建，等待手机 NPU 验证。正式 WAI LoRA 和普通词 embedding 加权尚未接入。稳定基线为用户已确认生图成功的 1.5.11 / code 17。正式版本号采用 1.6.0，后续修复使用 1.6.1 等命名。
 
 ## 目标与边界
 
@@ -28,7 +28,7 @@ LoRA 强度、普通词权重和全局 CFG 分别处理。LoRA 标签解析后�
 
 当前代码的 `--lora-slot` 仅切换预编译 UNet context，尚未实现任意用户 LoRA 权重加载。当前 QAIRT 2.48 SDK 提供 Android `libQnnLoraAdapterBinUpdater.so` 和 `QnnContext_applyBinarySection`；更新器需要适配模板、DLC 转换信息和既有 adapter binary。官方 LoRA 流程还提供浮点权重更新路线。这些构成可验证的实现候选，不能据此直接认定所有 SDXL LoRA 已兼容。
 
-优先验证一次性准备可更新底模，手机将兼容 LoRA 的键名、模块和秩适配到模板，生成或更新轻量 adapter binary，并缓存供下次调用。应优先保持现有浮点生图质量。不能把每个 LoRA 重编一套数 GB UNet 作为默认用户流程；若验证发现只能采用预编译包，应先重新确认交付方案。
+当前优先验证动态 A/B 输入路线：底模一次编译，LoRA 的矩阵和强度作为输入。手机实测通过后，才扩展到 WAI 的实际模块、秩和多 LoRA；预编译 adapter binary 作为对照及候选优化路线保留。SDK 更新器路径在本轮小图中存在编译错误，尚不能作为唯一依赖。应优先保持现有浮点生图质量。不能把每个 LoRA 重编一套数 GB UNet 作为默认用户流程；若验证发现只能采用预编译包，应先重新确认交付方案。
 
 首期面向当前 WAI / Illustrious SDXL 的普通 LoRA。SD1.5、Flux、SD3 与当前模型不混用；LyCORIS、LoHa、LoKr、特殊卷积或未支持的 text encoder 更新应显示具体状态，不能静默丢弃部分权重。先验证单 LoRA，再验证两项 LoRA 的组合和独立权重。包含 CLIP 修改的 LoRA 必须覆盖相应 CLIP 更新和条件缓存失效策略。
 
@@ -72,6 +72,18 @@ B 线为实时预览。独立准备 TAESDXL、组件下载和解码测试，在�
 五算子小模型在 ONNX Runtime CPU 上验证强度 0、0.8、1.1、-0.4、再次 0，最大绝对误差约 5.96e-8，两个零强度结果与基线相同。QAIRT 2.48 的 float_only 转换保留 `lora_A`、`lora_B` 两份可更新静态权重，离线编译得到 50,096 bytes 的 SM8750 HTP context，官方 utility 成功解析，并确认 `lora_alpha` 输入仍在。此结果证明该最小图的离线准备路径成立，未执行手机 NPU、未调用 adapter binary 热切换，也尚未证明完整 WAI 的 LoRA 兼容。
 
 下一断点是小图 adapter binary 的生成/替换验证，然后将同一机制映射到 WAI 的实际层名、形状及支持的 LoRA 秩。标准 UNet/CLIP 的现有冻结 context 不能直接当成已经支持任意 LoRA。需要新的可更新底模时，重型模型编译仍交给 workstation，APP 工作继续在 desktop。
+
+## 1.6.0-alpha.1 实验与测试包（2026-09-06）
+
+测试包使用独立 applicationId `com.geniex.demo.loratest`，名称为“Rin LoRA 1.6 测试”，versionCode 18。它与 1.5.11 并列安装，启动 LoRA 实验室，不替换正式生图应用，不重下或改写现有 WAI 模型。
+
+当前主测试是动态 A/B 权重输入。五算子的合成线性图保留 `sample [1,8,32]`、`lora_A [32,8]`、`lora_B [8,32]`、`lora_alpha [1,1,1]` 四个输入；7 组 CPU 数值检查通过，50,360-byte context 经官方 utility 确认为 SoC 69 / DSP V79。该路线尚未进行手机 NPU 验证，更不等于完整 SDXL LoRA 已可用。
+
+对照测试使用 50,096-byte 底模和三份各 25,744-byte 预编译适配器。全部经官方工具验证为 SoC 69 / V79。JNI 在同一 context 中执行七组测试，真实调用 contextApplyBinarySection，并检查恢复后的数值。带 enable_weights_updates 的 Conv 小图在二次整理图时失败，四维 alpha 变体也失败；一个线性小图在 compose 阶段失败。记录的是这些具体用例，不能推广为该 SDK 不支持所有 LoRA。
+
+测试 APP 已实现 runtime 子目录创建、后台 Safetensors 文件头检查、直接 LoRA 强度标签、两种自测入口和报告分享。候选文件显示“待 WAI 适配”，不把解析成功当作已可生成。21 项真实 Kotlin/JUnit 检查通过；APK 包含 19 个适配器路线素材和 30 个动态路线素材，逐项 SHA 校验通过。NDK、Kotlin、DSP 原字节恢复、历史证书签名均成功。手机界面和 NPU 结果仍待用户确认。
+
+下一验收点：手机安装测试包，授予文件权限，暂停正式版生图，运行“开始动态 LoRA NPU 自测”，再分享报告。动态路线通过后才准备完整 WAI 的固定秩/多适配器模板、层名映射和真实 LoRA 数值及成图验证。当前自测的 A/B 矩阵是内置合成数据，还不能将扫描到的用户文件用于 WAI 生图。实时预览和普通词 embedding 权重保持待实施状态。
 
 ## 依据
 

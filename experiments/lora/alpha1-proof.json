@@ -1,0 +1,54 @@
+{
+  "version": "1.6.0-alpha.1",
+  "code": 18,
+  "application_id": "com.geniex.demo.loratest",
+  "apk_bytes": 128698550,
+  "apk_sha256": "938c899389052acbe8e38866b4c081b7add5006cd4a43be6ceaee676d1626a74",
+  "certificate_sha256": "afeef7cf03c2bc3b411932df89330af1a6416f62e379096d72807305e3d9f801",
+  "junit": {
+    "tests": 21,
+    "failures": 0,
+    "errors": 0
+  },
+  "assets": {
+    "binary_section": 19,
+    "dynamic_weights": 30
+  },
+  "qnn_core_matches": 9,
+  "stable_apk_unchanged": true,
+  "phone_validated": false,
+  "wai_lora_integrated": false,
+  "dynamic_offline": {
+    "scope": "dynamic A/B input LoRA; CPU and offline V79 compile, not phone validation",
+    "ok": true,
+    "cpu_cases": 7,
+    "inputs": {
+      "sample": [
+        1,
+        8,
+        32
+      ],
+      "lora_A": [
+        32,
+        8
+      ],
+      "lora_B": [
+        8,
+        32
+      ],
+      "lora_alpha": [
+        1,
+        1,
+        1
+      ]
+    },
+    "context_bytes": 50360
+  },
+  "adapter_sections_target": {
+    "soc": 69,
+    "dsp": 79,
+    "base_bytes": 50096,
+    "adapter_bytes": 25744
+  },
+  "sdk_updateable_metadata_cases": "failed for tested Conv/4D-alpha/static-linear variants; does not prove universal incompatibility"
+}
