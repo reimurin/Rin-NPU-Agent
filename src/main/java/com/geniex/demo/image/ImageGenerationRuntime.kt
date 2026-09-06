@@ -78,7 +78,7 @@ class ImageGenerationRuntime(private val context: Context) {
         get() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "sdxl_qnn")
 
     fun hasStorageAccess(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) StorageAccess.granted() else true
 
     fun inspect(baseDir: File = defaultBaseDir): ImageRuntimeStatus {
         val permission = hasStorageAccess()
@@ -161,7 +161,7 @@ class ImageGenerationRuntime(private val context: Context) {
         baseDir: File = defaultBaseDir,
         callback: (ImageGenerationEvent) -> Unit,
     ): Boolean {
-        if (!running.compareAndSet(false, true)) return false
+        if (LoraSelfTest.busy.get() || !running.compareAndSet(false, true)) return false
         thread(name = "rin-sdxl-generation") {
             var totalSeconds: Double? = null
             var savedFile: File? = null
@@ -175,7 +175,7 @@ class ImageGenerationRuntime(private val context: Context) {
                     return@thread
                 }
                 if (!status.supports(request.resolution)) {
-                    callback(ImageGenerationEvent.Failure("Resolution ${request.resolution.key} is not installed"))
+                    callback(ImageGenerationEvent.Failure("原生尺寸 ${request.resolution.key} 尚未安装对应模型。现有 context 不会自动改变宽高。"))
                     return@thread
                 }
 
@@ -580,24 +580,7 @@ class ImageGenerationRuntime(private val context: Context) {
         env["PYTHONUTF8"] = "1"
     }
 
-    private fun discoverResolutions(baseDir: File): List<ImageResolution> {
-        val root = File(baseDir, "context")
-        if (!root.isDirectory) return emptyList()
-        val result = mutableSetOf<ImageResolution>()
-        root.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
-            val m = Regex("^(\\d+)x(\\d+)$").matchEntire(dir.name) ?: return@forEach
-            val resolution = ImageResolution(m.groupValues[1].toInt(), m.groupValues[2].toInt())
-            if (hasResolutionContexts(dir)) result += resolution
-        }
-        if (hasResolutionContexts(root)) result += ImageResolution(1024, 1024)
-        return result.sortedWith(compareBy<ImageResolution> { it.width * it.height }.thenBy { it.width })
-    }
-
-    private fun hasResolutionContexts(dir: File): Boolean = listOf(
-        "unet_encoder_fp16.serialized.bin.bin",
-        "unet_decoder_fp16.serialized.bin.bin",
-        "vae_decoder.serialized.bin.bin",
-    ).all { File(dir, it).isFile }
+    private fun discoverResolutions(baseDir: File): List<ImageResolution> = ResolutionCatalog.discover(baseDir)
 
     private fun configureEnvironment(
         env: MutableMap<String, String>,

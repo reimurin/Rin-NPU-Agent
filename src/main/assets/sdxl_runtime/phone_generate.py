@@ -233,10 +233,11 @@ def _discover_available_resolutions() -> list[tuple[int, int]]:
         except ValueError:
             continue
         sub = os.path.join(ctx_root, entry)
-        if os.path.isdir(sub) and needed.issubset(set(os.listdir(sub))):
+        if (64 <= w <= 8192 and 64 <= h <= 8192 and not w % 8 and not h % 8
+                and all(os.path.isfile(os.path.join(sub, n)) and os.path.getsize(os.path.join(sub, n)) > 0 for n in needed)):
             available.append((w, h))
     # Also check flat layout (legacy 1024×1024)
-    if all(os.path.isfile(os.path.join(ctx_root, n)) for n in needed):
+    if all(os.path.isfile(os.path.join(ctx_root, n)) and os.path.getsize(os.path.join(ctx_root, n)) > 0 for n in needed):
         if (1024, 1024) not in available:
             available.append((1024, 1024))
     available.sort(key=lambda r: r[0] * r[1])
@@ -316,7 +317,10 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
             ctx["vae"] = f"{res_dir}/vae_decoder.serialized.bin.bin"
         else:
             ctx["vae"] = f"{DR}/context/vae_decoder.serialized.bin.bin"
-    elif os.path.isdir(res_dir):
+    elif (width, height) != (1024, 1024) or all(
+        os.path.isfile(os.path.join(res_dir, name)) and os.path.getsize(os.path.join(res_dir, name)) > 0
+        for name in ["unet_encoder_fp16.serialized.bin.bin", "unet_decoder_fp16.serialized.bin.bin", "vae_decoder.serialized.bin.bin"]
+    ):
         ctx["encoder"] = f"{res_dir}/unet_encoder_fp16.serialized.bin.bin"
         ctx["decoder"] = f"{res_dir}/unet_decoder_fp16.serialized.bin.bin"
         ctx["vae"] = f"{res_dir}/vae_decoder.serialized.bin.bin"
@@ -327,7 +331,7 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
         ctx["vae"] = f"{DR}/context/vae_decoder.serialized.bin.bin"
     return ctx
 
-_IMAGE_WIDTH, _IMAGE_HEIGHT, _WAS_SNAPPED = _snap_to_nearest_resolution(_REQ_WIDTH, _REQ_HEIGHT)
+_IMAGE_WIDTH, _IMAGE_HEIGHT, _WAS_SNAPPED = _REQ_WIDTH, _REQ_HEIGHT, False
 CONTEXTS = _resolve_contexts(_IMAGE_WIDTH, _IMAGE_HEIGHT)
 TOKENIZER_DIR = f"{DR}/phone_gen/tokenizer"
 OUTPUT_DIR = _env_first(("MODEL_TO_NPU_OUTPUT_DIR", "SDXL_QNN_OUTPUT_DIR"), f"{DR}/outputs")
@@ -2815,11 +2819,11 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     if width % 8 or height % 8:
         raise ValueError(f"width ({width}) and height ({height}) must be multiples of 8")
 
-    # Snap to nearest available resolution if exact contexts don't exist
-    orig_w, orig_h = width, height
-    width, height, was_snapped = _snap_to_nearest_resolution(width, height)
-    if was_snapped:
-        _log(f"[resolution] {orig_w}x{orig_h} not available, snapped to {width}x{height}")
+    # Precompiled HTP contexts have fixed H/W; never pretend resizing is native generation.
+    available = _discover_available_resolutions()
+    if (width, height) not in available:
+        sizes = ", ".join(f"{w}x{h}" for w, h in available) or "none"
+        raise ValueError(f"Native resolution {width}x{height} is not installed; available={sizes}. Install matching UNet/VAE contexts.")
 
     latent_h, latent_w = height // 8, width // 8
     global CONTEXTS
@@ -3130,9 +3134,8 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     tag = name or f"gen_s{seed}"
     out_path = f"{OUTPUT_DIR}/{tag}.png"
     img_pil = Image.fromarray(img_u8)
-    if img_pil.width != _REQ_WIDTH or img_pil.height != _REQ_HEIGHT:
-        _log(f"[resolution] Resizing output image from {img_pil.width}x{img_pil.height} to requested {_REQ_WIDTH}x{_REQ_HEIGHT}...")
-        img_pil = img_pil.resize((_REQ_WIDTH, _REQ_HEIGHT), Image.Resampling.LANCZOS)
+    if img_pil.size != (width, height):
+        raise ValueError(f"VAE output dimensions {img_pil.size} do not match requested native size {(width, height)}")
     img_pil.save(
         out_path,
         format="PNG",

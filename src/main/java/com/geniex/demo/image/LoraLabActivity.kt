@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.geniex.demo.BuildConfig
@@ -22,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 class LoraLabActivity : AppCompatActivity() {
+    private var pageReady=false
     private lateinit var content: LinearLayout
     private lateinit var status: TextView
     private lateinit var catalog: LinearLayout
@@ -32,7 +34,7 @@ class LoraLabActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val refreshState = object : Runnable {
         override fun run() {
-            if (!isFinishing && !isDestroyed) {
+            if (pageReady && !isFinishing && !isDestroyed) {
                 status.text = LoraSelfTest.lastMessage
                 startButton.isEnabled = !LoraSelfTest.busy.get()
                 handler.postDelayed(this, 600)
@@ -53,14 +55,23 @@ class LoraLabActivity : AppCompatActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        StartupDiagnostics.install(applicationContext)
+        try { buildPage(); pageReady=true }
+        catch (e:Exception) {
+            StartupDiagnostics.record(this,"LoraLabActivity.buildPage",e)
+            showRecovery(e)
+        }
+    }
+    private fun buildPage() {
         title = "LoRA 1.6 测试"
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(32)) }
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(content, ViewGroup.LayoutParams(-1, -2)) })
+        button("返回生图页面") { finish() }
         label("LoRA 实验室", 26f)
-        label("${BuildConfig.VERSION_NAME} · 与 1.5.11 正式版并列安装", 14f)
+        label("${BuildConfig.VERSION_NAME} · 原应用内测试入口", 14f)
         label("优先验证动态 A/B 权重输入，再用适配器分段作对照。请先暂停正式版的生图任务。自测使用内置小模型，不生成图片、不改已有生图模型。")
         button("授予文件访问权限") {
-            if (Environment.isExternalStorageManager()) refreshCatalog()
+            if (StorageAccess.granted()) refreshCatalog()
             else runCatching { startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName"))) }
                 .onFailure { startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
         }
@@ -68,7 +79,7 @@ class LoraLabActivity : AppCompatActivity() {
         label("同一模型连续检查：原始 → 强度 0.8 → 1.1 → 更换权重 → 恢复 → 归零。结果与参考数值对比，不只检查是否报错。")
         status = label(LoraSelfTest.lastMessage)
         startButton = button("开始动态 LoRA NPU 自测") {
-            if (!Environment.isExternalStorageManager()) { status.text = "请先授予文件访问权限"; return@button }
+            if (!StorageAccess.granted()) { status.text = "请先授予文件访问权限"; return@button }
             val started = LoraSelfTest.start(this) { message ->
                 runOnUiThread { if (!isFinishing && !isDestroyed) { status.text = message; startButton.isEnabled = !LoraSelfTest.busy.get() } }
             }
@@ -81,10 +92,11 @@ class LoraLabActivity : AppCompatActivity() {
             }) status.text = "已有测试正在运行。"
         }
         button("分享自测报告") { shareReport() }
+        button("分享启动异常记录") { StartupDiagnostics.share(this) }
         label("直接权重标签", 21f)
         val field = TextInputLayout(this).apply { hint = "例如 <lora:角色名称:0.8>" }
         prompt = TextInputEditText(field.context).apply { minLines = 2; maxLines = 6; setText(getPreferences(MODE_PRIVATE).getString("tags", "<lora:角色名称:0.8>")) }
-        field.addView(prompt, ViewGroup.LayoutParams(-1, -2)); content.addView(field, LinearLayout.LayoutParams(-1, -2))
+        field.addView(prompt, LinearLayout.LayoutParams(-1, -2)); content.addView(field, LinearLayout.LayoutParams(-1, -2))
         tagResult = label("此处检查 LoRA 名称和强度，不会把标签直接交给 CLIP。普通词组的 embedding 加权仍待接入。")
         button("检查标签") {
             runCatching { LoraTags.parse(prompt.text?.toString().orEmpty()) }.onSuccess { parsed ->
@@ -102,6 +114,7 @@ class LoraLabActivity : AppCompatActivity() {
     }
     override fun onResume() {
         super.onResume()
+        if (!pageReady) return
         status.text = LoraSelfTest.lastMessage
         startButton.isEnabled = !LoraSelfTest.busy.get()
         refreshCatalog()
@@ -109,11 +122,15 @@ class LoraLabActivity : AppCompatActivity() {
     }
     override fun onPause() {
         handler.removeCallbacks(refreshState)
-        getPreferences(MODE_PRIVATE).edit().putString("tags", prompt.text?.toString().orEmpty()).apply()
+        if (::prompt.isInitialized) getPreferences(MODE_PRIVATE).edit().putString("tags", prompt.text?.toString().orEmpty()).apply()
         super.onPause()
     }
     private fun refreshCatalog() {
-        if (!Environment.isExternalStorageManager()) { catalog.removeAllViews(); label("等待文件访问权限。", parent = catalog); return }
+        if (!StorageAccess.granted()) {
+            catalog.removeAllViews()
+            label(if(StorageAccess.lastError==null) "等待文件访问权限。" else "存储暂未就绪，请稍后刷新。",parent=catalog)
+            return
+        }
         if (!scanning.compareAndSet(false, true)) return
         thread(name = "rin-lora-catalog") {
             val result = runCatching { LoraCatalog.scan(base) }
@@ -136,6 +153,14 @@ class LoraLabActivity : AppCompatActivity() {
                 }.onFailure { label(it.message ?: "扫描失败", parent = catalog) }
             }
         }
+    }
+    private fun showRecovery(error:Exception) {
+        pageReady=false
+        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(30),dp(20),dp(20)) }
+        root.addView(TextView(this).apply { text="LoRA 页面暂未打开，错误已保存。\n${error.javaClass.simpleName}: ${error.message}";textSize=16f;tag="startup_recovery" })
+        root.addView(Button(this).apply { text="分享启动诊断";setOnClickListener { StartupDiagnostics.share(this@LoraLabActivity) } })
+        root.addView(Button(this).apply { text="返回生图页面";setOnClickListener { finish() } })
+        setContentView(root)
     }
     private fun shareReport() {
         val file = File(cacheDir, "lora_selftest_latest.json")

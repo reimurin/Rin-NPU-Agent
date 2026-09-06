@@ -43,7 +43,7 @@ internal object LoraSelfTest {
                 .put("scope", "synthetic LoRA same-context switch test; not WAI compatibility").put("route", route)
             var diag: File? = null
             try {
-                require(Environment.isExternalStorageManager()) { "请先授予所有文件访问权限" }
+                require(StorageAccess.granted()) { "请先授予所有文件访问权限" }
                 require(Build.SOC_MODEL.contains("SM8750", true)) { "本自测素材只针对 SM8750" }
                 val base = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "sdxl_qnn")
                 LoraCatalog.directory(base)
