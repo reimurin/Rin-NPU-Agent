@@ -2,13 +2,18 @@ package com.geniex.demo.image
 import android.content.Context
 import org.json.JSONObject
 internal class LoraCompatibility private constructor(val capacity:Int,private val aliases:Map<String,Triple<String,Int,Int>>) {
-    fun check(prefix:String,down:List<Long>,up:List<Long>):String {
+    fun check(prefix:String,down:List<Long>,up:List<Long>):String? {
+        if(isKnownTextEncoderPrefix(prefix)) return null
         val item=aliases[prefix] ?: error("当前组件未覆盖该层，不会忽略：$prefix")
         require(down[0]<=capacity) { "LoRA 秩超过组件上限 $capacity" }
         require(down[1]==item.second.toLong()&&up[0]==item.third.toLong()) { "LoRA 与 WAI 层形状不匹配：$prefix" }
         return item.first
     }
     companion object {
+        fun isKnownTextEncoderPrefix(prefix:String):Boolean =
+            prefix.startsWith("lora_te_text_model_") ||
+            prefix.startsWith("lora_te1_text_model_") ||
+            prefix.startsWith("lora_te2_text_model_")
         fun load(context:Context):LoraCompatibility {
             val data=context.assets.open("lora_compatibility.json").bufferedReader().use{JSONObject(it.readText())}
             require(data.getInt("schema")==1&&data.getString("model_id")==LoraModelComponent.ID)

@@ -25,6 +25,30 @@ class LoraContractTest {
         }
     }
     @Test fun baseTextUnchanged() { assertEquals("(red hair:1.1), 16:9",LoraTags.parse("(red hair:1.1), 16:9").text) }
+    @Test fun knownTextEncoderPrefixesAreExplicitlyClassified() {
+        assertTrue(LoraCompatibility.isKnownTextEncoderPrefix("lora_te1_text_model_encoder_layers_0_mlp_fc1"))
+        assertTrue(LoraCompatibility.isKnownTextEncoderPrefix("lora_te2_text_model_encoder_layers_3_self_attn_q_proj"))
+        assertTrue(LoraCompatibility.isKnownTextEncoderPrefix("lora_te_text_model_encoder_layers_1_mlp_fc2"))
+    }
+    @Test fun arbitraryUnknownPrefixIsNotTextEncoder() {
+        assertFalse(LoraCompatibility.isKnownTextEncoderPrefix("lora_unet_unknown_block"))
+        assertFalse(LoraCompatibility.isKnownTextEncoderPrefix("lora_te1_something_else"))
+    }
+    @Test fun insertedTagDetectedWithFilenameAlias() {
+        assertTrue(LoraTags.contains("portrait, <lora:角色:0.8>", "角色.safetensors"))
+        assertFalse(LoraTags.contains("portrait, <lora:角色:0.8>", "另一个角色"))
+    }
+    @Test fun ejectRemovesOnlyTargetTag() {
+        val prompt="portrait, <lora:first:0.8>, detailed eyes, <lora:second:1.1>"
+        assertEquals("portrait, detailed eyes, <lora:second:1.1>", LoraTags.remove(prompt,"first"))
+    }
+    @Test fun ejectKeepsPromptWhenTargetAbsent() {
+        val prompt="portrait, <lora:second:1.1>"
+        assertEquals(prompt,LoraTags.remove(prompt,"first"))
+    }
+    @Test fun ejectHandlesTagAtPromptEnd() {
+        assertEquals("portrait",LoraTags.remove("portrait, <lora:first:0.8>","first"))
+    }
     private fun adapter(base: File, family: String = "sdxl_base_v1-0", incomplete: Boolean = false): File {
         val header=JSONObject().put("__metadata__",JSONObject().put("ss_base_model_version",family))
         header.put("m.lora_down.weight",JSONObject().put("dtype","F32").put("shape",JSONArray(listOf(2,4))).put("data_offsets",JSONArray(listOf(0,32))))

@@ -24,6 +24,22 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
 
+internal fun resolveImageGenerationSeed(
+    intent: Intent,
+    allowTestOverride: Boolean = false,
+    now: () -> Long = { System.currentTimeMillis() },
+): Long {
+    val override = if (allowTestOverride) intent.getLongExtra(ImageModeController.EXTRA_TEST_SEED, -1L) else -1L
+    return if (override in 0L..0x7fffffffL) override else (now() and 0x7fffffffL)
+}
+
+internal data class ImageTestAutomation(val prompt: String?, val autorun: Boolean)
+
+internal fun resolveImageTestAutomation(intent: Intent): ImageTestAutomation {
+    val prompt = intent.getStringExtra(ImageModeController.EXTRA_TEST_PROMPT)?.takeIf { it.isNotBlank() }
+    return ImageTestAutomation(prompt, prompt != null && intent.getBooleanExtra(ImageModeController.EXTRA_TEST_AUTORUN, false))
+}
+
 class ImageModeController(
     private val activity: Activity,
     private val binding: ActivityMainBinding,
@@ -47,7 +63,18 @@ class ImageModeController(
         setupSpinners()
         setupPromptState()
         setupListeners()
-        applyMode(currentMode, persist = false)
+        val test = resolveImageTestAutomation(activity.intent)
+        val automationSeed = if (test.autorun) resolveImageGenerationSeed(activity.intent, allowTestOverride = true) else null
+        test.prompt?.let { binding.etImagePrompt.setText(it) }
+        applyMode(if (test.autorun) AppMode.IMAGE else currentMode, persist = false)
+        if (test.autorun) {
+            activity.window.decorView.postDelayed({
+                if (!activity.isFinishing && !activity.isDestroyed && !runtime.isRunning()) startGeneration(automationSeed)
+                activity.intent.removeExtra(EXTRA_TEST_SEED)
+                activity.intent.removeExtra(EXTRA_TEST_PROMPT)
+                activity.intent.removeExtra(EXTRA_TEST_AUTORUN)
+            }, 2500L)
+        }
     }
 
     fun onResume() {
@@ -400,7 +427,7 @@ class ImageModeController(
             .onFailure { activity.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
     }
 
-    private fun startGeneration() {
+    private fun startGeneration(seedOverride: Long? = null) {
         val prompt = binding.etImagePrompt.text?.toString().orEmpty().trim()
         if (prompt.isEmpty()) {
             binding.etImagePrompt.error = activity.getString(R.string.positive_prompt)
@@ -444,6 +471,7 @@ class ImageModeController(
                             resolution = resolution,
                             steps = 8,
                             cfg = 3.5f,
+                            seed = seedOverride ?: resolveImageGenerationSeed(activity.intent),
                             livePreview = binding.switchLivePreview.isChecked && status.previewSupported,
                             progressiveCfg = true,
                         ),
@@ -608,6 +636,9 @@ class ImageModeController(
 
     companion object {
         const val REQUEST_LORA_EDITOR = 16603
+        const val EXTRA_TEST_SEED = "rin_test_seed"
+        const val EXTRA_TEST_PROMPT = "rin_test_prompt"
+        const val EXTRA_TEST_AUTORUN = "rin_test_autorun"
         private const val KEY_MODE = "mode"
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_NEGATIVE_LOCKED = "negative_locked"

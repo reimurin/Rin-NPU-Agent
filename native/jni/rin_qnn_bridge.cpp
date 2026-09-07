@@ -8,6 +8,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 #include "DynamicLoadUtil.hpp"
 #include "Logger.hpp"
@@ -308,6 +309,8 @@ cleanup:
                       elapsedMs());
   return makeResult(env, ok, stage, detail, elapsedMs(), backendBuild, operationLog);
 }
+
+#include "rin_qnn_persistent.inc"
 
 // Isolated 1.6 LoRA sequence self-test. The normal generation entry is unchanged.
 extern "C" JNIEXPORT jstring JNICALL

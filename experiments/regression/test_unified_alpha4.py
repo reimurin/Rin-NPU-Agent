@@ -31,6 +31,22 @@ class UnifiedTests(baseline.Tests):
         self.assertFalse(unified.active(self.base))
         self.assertEqual(plan.contexts,{})
 
+    def test_28_executor_persists_only_selected_graph_part(self):
+        unified.set_active(self.base,True,'test',['encoder_p0'])
+        plan=unified.prepare('cat','',self.base,1024,1024,log=lambda _:None)
+        self.assertEqual(plan.metadata['persistent_parts'],['encoder_p0'])
+        self.run_plan(plan)
+        flags={pid:kwargs.get('persistent_context') for pid,kwargs in self.calls}
+        self.assertTrue(flags['encoder_p0'])
+        self.assertFalse(flags['encoder_p1'])
+
+    def test_29_unknown_persistent_graph_part_rolls_back(self):
+        unified.set_active(self.base,True,'test',['encoder_p99'])
+        plan=unified.prepare('cat','',self.base,1024,1024,log=lambda _:None)
+        self.assertTrue(plan.metadata['rollback'])
+        self.assertFalse(unified.active(self.base))
+        self.assertIn('encoder_p99',plan.metadata['rollback_reason'])
+
 if __name__=='__main__':
     ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);args=ap.parse_args();OUT=Path(args.out)
     if OUT.exists():raise SystemExit('Choose new test directory')

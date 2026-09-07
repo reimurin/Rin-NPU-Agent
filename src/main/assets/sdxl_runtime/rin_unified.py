@@ -20,18 +20,26 @@ def _component(base):
 def activation_path(base):
     return _component(base)/ACTIVATION_FILE
 
-def active(base):
-    try:
-        marker=activation_path(base)
-        if not marker.is_file() or marker.stat().st_size>64*1024:return False
-        data=part.read_json(marker,64*1024)
-        return data.get('schema')==1 and data.get('model_id')==part.MODEL_ID and data.get('active') is True
-    except (OSError,ValueError,KeyError,TypeError,LoraError):
-        return False
+def activation_config(base):
+    marker=activation_path(base)
+    if not marker.is_file():return {'active':False,'persistent_parts':[]}
+    if marker.stat().st_size>64*1024:raise LoraError('Oversized unified activation metadata')
+    data=part.read_json(marker,64*1024)
+    if data.get('schema')!=1 or data.get('model_id')!=part.MODEL_ID:raise LoraError('Unified activation metadata does not match this model')
+    raw=data.get('persistent_parts',[])
+    if not isinstance(raw,list) or len(raw)>8 or any(not isinstance(x,str) or not x or len(x)>64 for x in raw):raise LoraError('Invalid persistent part list')
+    if len(raw)!=len(set(raw)):raise LoraError('Duplicate persistent part id')
+    return {'active':data.get('active') is True,'reason':str(data.get('reason',''))[:240],'persistent_parts':raw}
 
-def set_active(base,enabled,reason=''):
+def active(base):
+    try:return activation_config(base)['active']
+    except (OSError,ValueError,KeyError,TypeError,LoraError):return False
+
+def set_active(base,enabled,reason='',persistent_parts=()):
+    values=list(persistent_parts)
+    if len(values)>8 or any(not isinstance(x,str) or not x or len(x)>64 for x in values) or len(values)!=len(set(values)):raise LoraError('Invalid persistent part list')
     marker=activation_path(base);marker.parent.mkdir(parents=True,exist_ok=True)
-    part.atomic_json(marker,{'schema':1,'model_id':part.MODEL_ID,'active':bool(enabled),'reason':str(reason)[:240]})
+    part.atomic_json(marker,{'schema':1,'model_id':part.MODEL_ID,'active':bool(enabled),'reason':str(reason)[:240],'persistent_parts':values})
 
 def component_ready(base):
     try:
@@ -46,11 +54,16 @@ def component_ready(base):
     except (OSError,ValueError,KeyError,TypeError,LoraError):
         return False
 
-def _prepare_unified(clean,negative,base,width,height,selections,log):
+def _prepare_unified(clean,negative,base,width,height,selections,persistent_parts,log):
     base=Path(base).resolve();template=_component(base);mp=template/'lora_template.json'
     if not mp.is_file():raise LoraError('统一 WAI 模型未安装完整；旧普通 UNet 仍可回退。')
     manifest=part.read_json(mp);modules,aliases=part.validate(manifest)
     if manifest['resolution']!=[width,height]:raise LoraError('统一 WAI 模型当前只支持原生 1024x1024')
+    available_parts={spec['id'] for stage in ('encoder','decoder') for spec in manifest['graphs'][stage]['parts']}
+    requested=set(persistent_parts)
+    if len(requested)!=len(persistent_parts) or not requested.issubset(available_parts):
+        unknown=sorted(requested-available_parts)
+        raise LoraError('Unsupported persistent graph part: '+(', '.join(unknown) if unknown else 'duplicate id'))
     mapped,evidence=part.map_adapters(selections,part.inside(base,'Lora'),modules,aliases) if selections else ({},[])
     stages=['encoder','decoder']
     cache=part.inside(base,'.rin_lora/unified');cache.mkdir(parents=True,exist_ok=True)
@@ -102,18 +115,20 @@ def _prepare_unified(clean,negative,base,width,height,selections,log):
     for entries in mapped.values():
         for source,_,_ in entries:source.check_unchanged()
     paths={pid:{name:str(part.inside(dest,item['file'])) for name,item in items.items()} for pid,items in banks.items()}
-    metadata={'active':bool(evidence),'unified_model':True,'zero_delta':not bool(evidence),'format':'rin-wai-unified-alpha4-v1','model_id':part.MODEL_ID,'files':evidence,'mapped_modules':len(mapped),'rank_capacity':64,'partition_count':7,'cache_dir':str(dest),'base_contexts_used_for':[]}
-    return part.PartitionPlan(clean,negative,{s:contexts[manifest['graphs'][s]['parts'][0]['id']] for s in stages},{},metadata,manifest,contexts,paths)
+    metadata={'active':bool(evidence),'unified_model':True,'zero_delta':not bool(evidence),'format':'rin-wai-unified-alpha4-v1','model_id':part.MODEL_ID,'files':evidence,'mapped_modules':len(mapped),'rank_capacity':64,'partition_count':7,'cache_dir':str(dest),'base_contexts_used_for':[],'persistent_parts':sorted(requested)}
+    return part.PartitionPlan(clean,negative,{s:contexts[manifest['graphs'][s]['parts'][0]['id']] for s in stages},{},metadata,manifest,contexts,paths,requested)
 
 def prepare(prompt,negative,base,width,height,log=print):
     clean,selections=legacy.parse_tags(prompt);neg,negative_tags=legacy.parse_tags(negative)
     if negative_tags:raise LoraError('Place LoRA controls in the positive prompt, not the negative prompt')
     enabled=[s for s in selections if s.weight!=0]
-    if not active(base):
-        return legacy.prepare(prompt,negative,base,width,height,log=log)
     try:
-        plan=_prepare_unified(clean,neg,base,width,height,enabled,log)
-        log('[Unified WAI] active: seven-part UNet; '+('LoRA matrices applied' if enabled else 'zero-delta baseline'))
+        config=activation_config(base)
+        if not config['active']:
+            return legacy.prepare(prompt,negative,base,width,height,log=log)
+        plan=_prepare_unified(clean,neg,base,width,height,enabled,config['persistent_parts'],log)
+        suffix='; persistent='+(','.join(plan.metadata['persistent_parts']) if plan.metadata['persistent_parts'] else 'off')
+        log('[Unified WAI] active: seven-part UNet; '+('LoRA matrices applied' if enabled else 'zero-delta baseline')+suffix)
         return plan
     except Exception as e:
         try:set_active(base,False,'runtime_validation_failed')

@@ -27,6 +27,18 @@ internal object QnnInProcessNative {
         nativeInput: Boolean,
         nativeOutput: Boolean,
     ): String
+
+    external fun runContextPersistent(
+        backendPath: String,
+        systemLibraryPath: String,
+        contextPath: String,
+        inputListPath: String,
+        outputDir: String,
+        nativeInput: Boolean,
+        nativeOutput: Boolean,
+    ): String
+
+    external fun releasePersistentContexts(): String
 }
 
 internal class QnnInProcessBridgeServer(
@@ -49,6 +61,9 @@ internal class QnnInProcessBridgeServer(
     fun start(): QnnInProcessBridgeServer {
         if (running.get()) return this
         diagDir.mkdirs()
+        val cacheReset = runCatching { QnnInProcessNative.releasePersistentContexts() }
+            .getOrElse { "reset-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("PERSISTENT_RESET raw=$cacheReset")
         preloadSummary = configureAndPreload()
         val socket = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
         server = socket
@@ -131,6 +146,7 @@ internal class QnnInProcessBridgeServer(
         val outputDir = req.getString("output_dir")
         val nativeInput = req.optBoolean("native_input", false)
         val nativeOutput = req.optBoolean("native_output", false)
+        val persistentContext = req.optBoolean("persistent_context", false)
         val stage = req.optString("stage", "qnn")
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val backend = File(nativeDir, "libQnnHtp.so")
@@ -143,18 +159,30 @@ internal class QnnInProcessBridgeServer(
                 .toString()
         }
         File(outputDir).mkdirs()
-        appendLog("REQUEST stage=$stage ctx=$ctx input=$inputList out=$outputDir nativeIn=$nativeInput nativeOut=$nativeOutput")
+        appendLog("REQUEST stage=$stage ctx=$ctx input=$inputList out=$outputDir nativeIn=$nativeInput nativeOut=$nativeOutput persistent=$persistentContext")
         val started = System.nanoTime()
         return try {
-            val raw = QnnInProcessNative.runContext(
-                backend.absolutePath,
-                system.absolutePath,
-                ctx,
-                inputList,
-                outputDir,
-                nativeInput,
-                nativeOutput,
-            )
+            val raw = if (persistentContext) {
+                QnnInProcessNative.runContextPersistent(
+                    backend.absolutePath,
+                    system.absolutePath,
+                    ctx,
+                    inputList,
+                    outputDir,
+                    nativeInput,
+                    nativeOutput,
+                )
+            } else {
+                QnnInProcessNative.runContext(
+                    backend.absolutePath,
+                    system.absolutePath,
+                    ctx,
+                    inputList,
+                    outputDir,
+                    nativeInput,
+                    nativeOutput,
+                )
+            }
             val elapsed = (System.nanoTime() - started) / 1_000_000.0
             appendLog("RESULT stage=$stage elapsedMs=${"%.1f".format(elapsed)} raw=$raw")
             raw
@@ -183,6 +211,9 @@ internal class QnnInProcessBridgeServer(
         if (!running.getAndSet(false)) return
         runCatching { server?.close() }
         runCatching { worker?.join(1_500) }
+        val release = runCatching { QnnInProcessNative.releasePersistentContexts() }
+            .getOrElse { "release-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("PERSISTENT_RELEASE raw=$release")
         appendLog("STOP")
         server = null
         worker = null

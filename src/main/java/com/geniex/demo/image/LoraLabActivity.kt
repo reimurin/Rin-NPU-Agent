@@ -104,8 +104,9 @@ class LoraLabActivity:AppCompatActivity() {
         button("检查标签") {
             runCatching{LoraTags.parse(prompt.text?.toString().orEmpty())}.onSuccess { parsed->
                 tagResult.text=if(parsed.selections.isEmpty())"没有 LoRA 标签，将使用原底模。" else parsed.selections.joinToString("\n"){
-                    "${it.name}：${it.weight}"+if(it.weight==0.0)"（关闭）" else "（语法通过，生成时校验文件和组件）"
+                    "${it.name}：${it.weight}"+if(it.weight==0.0)"（关闭）" else "（已插入；生成时校验文件和组件）"
                 }
+                refreshCatalog()
             }.onFailure{tagResult.text=it.message ?: "标签格式错误"}
         }
         button("应用并返回生图",tone=RinControls.Tone.PRIMARY) {
@@ -115,7 +116,7 @@ class LoraLabActivity:AppCompatActivity() {
             }.onFailure{tagResult.text=it.message ?: "标签格式错误"}
         }.tag="lora_apply_to_prompt"
         label("本地 LoRA 文件夹",21f);label(File(base,"Lora").absolutePath,14f)
-        label("将 .safetensors 放入此目录。打开页面时自动检查文件完整性、层名、矩阵形状和秩；插入后可直接编辑权重。",14f)
+        label("将 .safetensors 放入此目录。打开页面时自动检查文件完整性、层名、矩阵形状和秩；卡片会检测当前提示词：未插入显示“插入”，已插入显示“弹出 · 当前权重”。弹出只移除标签，不删除本地 LoRA 文件。",14f)
         button("刷新 LoRA 列表"){refreshCatalog()}
         catalog=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};content.addView(catalog,LinearLayout.LayoutParams(-1,-2))
         val advanced=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;visibility=View.GONE}
@@ -153,12 +154,24 @@ class LoraLabActivity:AppCompatActivity() {
                     if(entries.isEmpty())label("目录已创建，暂未发现 LoRA 文件。",parent=catalog)
                     entries.forEach {entry->
                         label(entry.name,18f,catalog);label("${entry.bytes/1024/1024} MiB · ${entry.detail}",14f,catalog)
-                        if(entry.compatible)button("插入 ${entry.name} 标签",catalog) {
-                            runCatching {
-                                val old=prompt.text?.toString().orEmpty();val parsed=LoraTags.parse(old)
-                                if(parsed.selections.none{it.name==entry.name})prompt.setText(old.trimEnd()+(if(old.isBlank())"" else ", ")+LoraTags.format(entry.name))
-                                tagResult.text="已准备 ${entry.name}，可直接修改末尾权重，然后应用回生图页。"
-                            }.onFailure{tagResult.text=it.message ?: "请先修正已有标签"}
+                        if(entry.compatible) {
+                            val current=prompt.text?.toString().orEmpty()
+                            val selection=runCatching{LoraTags.parse(current).selections.firstOrNull{it.name==entry.name}}.getOrNull()
+                            val inserted=selection!=null
+                            val actionText=if(inserted)"弹出 ${entry.name} · ${selection!!.weight}" else "插入 ${entry.name} 标签"
+                            button(actionText,catalog,if(inserted)RinControls.Tone.GHOST else RinControls.Tone.SECONDARY) {
+                                runCatching {
+                                    val old=prompt.text?.toString().orEmpty()
+                                    if(LoraTags.contains(old,entry.name)) {
+                                        prompt.setText(LoraTags.remove(old,entry.name))
+                                        tagResult.text="已弹出 ${entry.name}；只移除了提示词标签，本地 LoRA 文件仍保留。"
+                                    } else {
+                                        prompt.setText(old.trimEnd()+(if(old.isBlank())"" else ", ")+LoraTags.format(entry.name))
+                                        tagResult.text="已插入 ${entry.name} · 0.8；可直接修改末尾权重，然后应用回生图页。"
+                                    }
+                                    refreshCatalog()
+                                }.onFailure{tagResult.text=it.message ?: "请先修正已有标签"}
+                            }
                         }
                     }
                 }.onFailure{label(it.message ?: "扫描失败",parent=catalog)}

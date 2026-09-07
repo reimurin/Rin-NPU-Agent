@@ -2070,7 +2070,7 @@ def _write_qnn_diagnostic(*, stage: str, cmd: list[str], env: dict, returncode: 
 
 
 def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_dir: str,
-                    native_input: bool, native_output: bool) -> tuple[float, dict]:
+                    native_input: bool, native_output: bool, persistent_context: bool = False) -> tuple[float, dict]:
     if QNN_BRIDGE_PORT <= 0:
         raise RuntimeError("QNN in-process bridge port is not configured")
     request = {
@@ -2081,6 +2081,7 @@ def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_d
         "output_dir": output_dir,
         "native_input": bool(native_input),
         "native_output": bool(native_output),
+        "persistent_context": bool(persistent_context),
     }
     payload = (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
     with socket.create_connection(("127.0.0.1", QNN_BRIDGE_PORT), timeout=10.0) as sock:
@@ -2124,7 +2125,8 @@ def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
 
 def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
             native_input=False, backend=None, model_path=None, config_file=None,
-            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None):
+            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None,
+            persistent_context=False):
     """Run QNN context on NPU via qnn-net-run."""
     if ctx_path is None and model_path is None:
         raise ValueError("qnn_run needs either ctx_path or model_path")
@@ -2160,6 +2162,7 @@ def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
                 output_dir=output_dir,
                 native_input=native_input,
                 native_output=native,
+                persistent_context=persistent_context,
             )
             output_count = validate_output_tree(output_dir, result_count)
             _log(f"[QNN OUTPUT OK] stage={stage} results={result_count} tensors={output_count}")
@@ -2178,7 +2181,8 @@ def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
             raise RuntimeError(f"QNN in-process bridge stage={stage} failed: {e}; log={diag_path}") from e
         _log(
             f"[QNN BRIDGE OK] stage={stage} {bridge_ms:.0f}ms "
-            f"nativeStage={bridge_response.get('stage','?')} backend={bridge_response.get('backend_build','')}"
+            f"nativeStage={bridge_response.get('stage','?')} backend={bridge_response.get('backend_build','')} "
+            f"persistent={'yes' if persistent_context else 'no'} cache={bridge_response.get('detail','')}"
         )
         return bridge_ms
 

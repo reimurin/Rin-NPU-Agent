@@ -1,6 +1,6 @@
 """Real-LoRA preparation and sequential QNN execution for verified WAI partitions."""
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass,field
 import hashlib,json,math,os,re,shutil,tempfile,uuid
 import numpy as np
 from rin_lora import LoraError,Plan,SafeWeights,_json,_stamp,digest
@@ -85,6 +85,9 @@ def validate(manifest):
         if flat!=spec.get('layers') or not set(spec['original_outputs']).issubset(available):raise LoraError('Incomplete final graph outputs')
     return modules,aliases
 
+def is_known_text_encoder_alias(alias):
+    return alias.startswith(('lora_te_text_model_','lora_te1_text_model_','lora_te2_text_model_'))
+
 def map_adapters(selections,folder,modules,aliases):
     if len(selections)>4:raise LoraError('At most four LoRAs within each layer rank capacity')
     if not folder.is_dir():raise LoraError('Place .safetensors in Download/sdxl_qnn/Lora/')
@@ -99,18 +102,22 @@ def map_adapters(selections,folder,modules,aliases):
         if path.is_symlink() or not path.is_file() or path.resolve().parent!=folder.resolve():raise LoraError('Invalid LoRA file path')
         weights=SafeWeights(path);family=weights.metadata.get('ss_base_model_version','').lower()
         if family and not any(k in family for k in ('sdxl','illustrious')):raise LoraError('Adapter declares a different model: '+family)
-        seen=set();pairs=weights.pairs()
+        seen=set();pairs=weights.pairs();ignored_text_encoder=[]
         for pair in pairs:
             module=aliases.get(pair['alias'])
-            if module is None:raise LoraError('Unsupported LoRA layer, not ignored: '+pair['alias']+'; component covers UNet linear layers only')
+            if module is None:
+                if is_known_text_encoder_alias(pair['alias']):
+                    ignored_text_encoder.append(pair['alias']);continue
+                raise LoraError('Unsupported LoRA layer, not ignored: '+pair['alias']+'; component covers UNet linear layers only')
             if module in seen:raise LoraError('Duplicate aliases for one LoRA layer')
             seen.add(module);_,_,layer=modules[module]
             if (pair['in'],pair['out'])!=(layer['in_features'],layer['out_features']):raise LoraError('LoRA/base shape mismatch: '+module)
             entries=mapped.setdefault(module,[])
             if pair['rank']+sum(x[1]['rank'] for x in entries)>layer['capacity']:raise LoraError('Combined LoRA rank exceeds 64: '+module)
             entries.append((weights,pair,selection.weight))
+        if not seen:raise LoraError('LoRA contains no injectable UNet linear layers: '+selection.name)
         file_sha=digest(path);weights.check_unchanged()
-        evidence.append({'name':selection.name,'weight':selection.weight,'sha256':file_sha,'bytes':path.stat().st_size,'modules':len(pairs)})
+        evidence.append({'name':selection.name,'weight':selection.weight,'sha256':file_sha,'bytes':path.stat().st_size,'modules':len(seen),'source_pairs':len(pairs),'ignored_text_encoder_modules':len(ignored_text_encoder)})
     return mapped,evidence
 
 def verify_contexts(template,manifest,cache,stages):
@@ -193,6 +200,7 @@ class PartitionPlan(Plan):
     manifest:dict
     part_contexts:dict
     banks:dict
+    persistent_parts:set=field(default_factory=set)
     def stage_for(self,context):
         return next((s for s,path in self.contexts.items() if Path(path).resolve()==Path(context).resolve()),None)
     def execute(self,stage,input_list,output_dir,single,*,work_dir,native=False,native_input=False,**kwargs):
@@ -238,7 +246,7 @@ class PartitionPlan(Plan):
                         entries.append(named_input(binding['name'],path))
                     entries.extend(named_input(name,path) for name,path in self.banks[pid].items());part_rows.append(entries)
                 listing=temp/(pid+'.inputs.txt');write_input_rows(listing,part_rows)
-                elapsed=single(self.part_contexts[pid],str(listing),str(part_out),native=False,native_input=False,profile_tag=str(profile)+'_'+pid,**kwargs);total_ms+=float(elapsed)
+                elapsed=single(self.part_contexts[pid],str(listing),str(part_out),native=False,native_input=False,profile_tag=str(profile)+'_'+pid,persistent_context=(pid in self.persistent_parts),**kwargs);total_ms+=float(elapsed)
                 for rid,state in enumerate(states):
                     for binding in part['output_bindings']:
                         path,info=resolve_output(part_out/('Result_'+str(rid)),binding['name'],expected_elements=math.prod(binding['qnn_shape']))
