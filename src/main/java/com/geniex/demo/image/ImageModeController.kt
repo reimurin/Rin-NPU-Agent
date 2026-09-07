@@ -56,6 +56,7 @@ class ImageModeController(
     }.getOrDefault(AppMode.CHAT)
     private var lastGeneratedFile: File? = null
     private var lastRuntimeStatus: ImageRuntimeStatus? = null
+    private var activeGenerationSeed: Long = -1L
     @Volatile private var autoContextRepairRequested = false
     private var resolutions = emptyList<ImageResolution>()
 
@@ -194,6 +195,7 @@ class ImageModeController(
         binding.btnImageGenerate.setOnClickListener { startGeneration() }
         binding.btnImageStop.setOnClickListener {
             runtime.stop()
+            activeGenerationSeed = -1L
             setGenerating(false)
             binding.tvImageGenerationStatus.text = activity.getString(R.string.image_status_idle)
         }
@@ -464,6 +466,8 @@ class ImageModeController(
                     binding.imageGenerationProgress.progress = 0
                     binding.tvImageGenerationTiming.visibility = View.GONE
                     setGenerating(true)
+                    val generationSeed = seedOverride ?: resolveImageGenerationSeed(activity.intent)
+                    activeGenerationSeed = generationSeed
                     val started = runtime.generate(
                         ImageGenerationRequest(
                             prompt = prompt,
@@ -471,13 +475,13 @@ class ImageModeController(
                             resolution = resolution,
                             steps = 8,
                             cfg = 3.5f,
-                            seed = seedOverride ?: resolveImageGenerationSeed(activity.intent),
+                            seed = generationSeed,
                             livePreview = binding.switchLivePreview.isChecked && status.previewSupported,
                             progressiveCfg = true,
                         ),
                         callback = ::handleRuntimeEvent,
                     )
-                    if (!started) setGenerating(false)
+                    if (!started) { activeGenerationSeed = -1L; setGenerating(false) }
                 }
             }
         }, "rin-image-preflight").start()
@@ -508,6 +512,11 @@ class ImageModeController(
                 is ImageGenerationEvent.Complete -> {
                     lastGeneratedFile = event.file
                     showImage(event.file)
+                    val completedSeed = activeGenerationSeed
+                    activeGenerationSeed = -1L
+                    if (completedSeed >= 0L) Thread({
+                        runCatching { LoraHistoryStore.recordFromDiagnostics(activity, runtime.defaultBaseDir, event.file, completedSeed) }
+                    }, "rin-lora-history").start()
                     binding.imageGenerationProgress.setProgressCompat(100, true)
                     binding.tvImageGenerationStep.text = "8/8"
                     binding.tvImageGenerationStatus.setText(R.string.image_status_idle)
@@ -522,6 +531,7 @@ class ImageModeController(
                     binding.btnImageSave.visibility = View.VISIBLE
                 }
                 is ImageGenerationEvent.Failure -> {
+                    activeGenerationSeed = -1L
                     setGenerating(false)
                     binding.tvImageGenerationTiming.visibility = View.VISIBLE
                     binding.tvImageGenerationTiming.text = activity.getString(R.string.runtime_generate_failed, event.message)

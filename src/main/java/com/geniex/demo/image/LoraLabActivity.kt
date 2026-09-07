@@ -2,6 +2,7 @@ package com.geniex.demo.image
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
@@ -11,11 +12,13 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.geniex.demo.BuildConfig
@@ -23,6 +26,9 @@ import com.geniex.demo.R
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -75,20 +81,20 @@ class LoraLabActivity:AppCompatActivity() {
         setContentView(ScrollView(this).apply{isFillViewport=true;addView(content,ViewGroup.LayoutParams(-1,-2))})
         button("返回生图页面",tone=RinControls.Tone.GHOST){finish()}
         label("LoRA 实验室",26f);label("${BuildConfig.VERSION_NAME} · 原应用内 LoRA 管理",14f)
-        label("支持兼容的 SDXL UNet 线性 LoRA；同一层的多个 LoRA 合计秩不超过 64。含文本编码器、空间卷积或其他未覆盖权重的文件会显示原因，不会悄悄忽略。")
+        label("支持兼容的 SDXL / Illustrious UNet 线性 LoRA；同一层的多个 LoRA 合计秩不超过 64。已知文本编码器权重会明确显示当前是否注入，其他未覆盖层仍会报错，不会悄悄忽略。")
         button("授予文件访问权限") {
             if(StorageAccess.granted())refreshCatalog()
             else runCatching{startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:$packageName")))}
                 .onFailure{startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))}
         }
         label("统一 WAI 模型（普通生图 + LoRA）",21f)
-        label("SM8750 · 原生 1024 × 1024\n升级载荷 7,662,304,830 bytes（7.14 GiB）；升级阶段临时峰值约 9.50 GiB。激活后普通生图与 LoRA 共用同一套七段 UNet。旧两段 UNet 共 5,256,428,704 bytes（4.90 GiB）先保留作回滚点；实机质量与速度通过后再释放。按当前 CLIP-G 修复基线估算，清理旧 UNet 后整个 runtime 约 9.17 GiB。",14f)
+        label("alpha.5 将普通生图与 LoRA 固化为同一套七段 UNet；1024 × 1024 保持兼容，并开始支持按分辨率安装独立 QNN context。旧两段 UNet 在 alpha.5 实机验收前仍保留作回滚点。",14f)
         componentStatus=label(LoraModelComponent.status)
         installButton=button("安装 / 继续升级统一模型") {
             if(!StorageAccess.granted()){LoraModelComponent.status="请先授予文件访问权限";return@button}
             if(LoraSelfTest.busy.get()){LoraModelComponent.status="请等待 NPU 自测结束";return@button}
-            RinControls.dialog(this).setTitle("升级到支持 LoRA 的统一 WAI 模型")
-                .setMessage("下载并校验 7.14 GiB 的新统一 UNet 到 staging；不会提前删除旧模型。alpha.4 实机验收通过后再释放旧 UNet。")
+            RinControls.dialog(this).setTitle("升级统一 WAI 模型")
+                .setMessage("下载并校验统一七段 UNet 到 staging；不会提前删除旧模型。alpha.5 实机验收通过后再释放旧 UNet。")
                 .setNegativeButton("取消",null).setPositiveButton("开始 / 继续") {_,_->
                     LoraModelComponent.install(this,base) { message->runOnUiThread {
                         if(pageReady&&!isFinishing&&!isDestroyed)componentStatus.text=message
@@ -103,7 +109,7 @@ class LoraLabActivity:AppCompatActivity() {
         tagResult=label("末尾直接写 :0.8、:1.1；:0 表示关闭。标签从文本编码中分离，普通词组的 embedding 加权尚未接入。",14f)
         button("检查标签") {
             runCatching{LoraTags.parse(prompt.text?.toString().orEmpty())}.onSuccess { parsed->
-                tagResult.text=if(parsed.selections.isEmpty())"没有 LoRA 标签，将使用原底模。" else parsed.selections.joinToString("\n"){
+                tagResult.text=if(parsed.selections.isEmpty())"没有 LoRA 标签，将使用统一底模。" else parsed.selections.joinToString("\n"){
                     "${it.name}：${it.weight}"+if(it.weight==0.0)"（关闭）" else "（已插入；生成时校验文件和组件）"
                 }
                 refreshCatalog()
@@ -116,7 +122,7 @@ class LoraLabActivity:AppCompatActivity() {
             }.onFailure{tagResult.text=it.message ?: "标签格式错误"}
         }.tag="lora_apply_to_prompt"
         label("本地 LoRA 文件夹",21f);label(File(base,"Lora").absolutePath,14f)
-        label("将 .safetensors 放入此目录。打开页面时自动检查文件完整性、层名、矩阵形状和秩；卡片会检测当前提示词：未插入显示“插入”，已插入显示“弹出 · 当前权重”。弹出只移除标签，不删除本地 LoRA 文件。",14f)
+        label("将 .safetensors 放入此目录。卡片会检测当前提示词：未插入显示“插入”，已插入显示“弹出 · 当前权重”。如果这个 LoRA 成功生成过图片，还会显示最近一次效果图、权重、时间和 Seed。弹出只移除标签，不删除 LoRA 文件。",14f)
         button("刷新 LoRA 列表"){refreshCatalog()}
         catalog=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};content.addView(catalog,LinearLayout.LayoutParams(-1,-2))
         val advanced=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;visibility=View.GONE}
@@ -144,22 +150,37 @@ class LoraLabActivity:AppCompatActivity() {
         if(!scanning.compareAndSet(false,true))return
         thread(name="rin-lora-catalog") {
             val result=runCatching{LoraCatalog.scan(base,LoraCompatibility.load(applicationContext))}
+            val history=runCatching{LoraHistoryStore.index(applicationContext)}.getOrDefault(emptyMap())
             val installed=LoraModelComponent.installed(base)
             runOnUiThread {
                 scanning.set(false)
                 if(!pageReady||isFinishing||isDestroyed)return@runOnUiThread
-                if(!LoraModelComponent.busy.get())LoraModelComponent.status=if(installed)"统一 WAI 模型已安装；旧 UNet 暂保留回滚，alpha.4 激活后普通生图与 LoRA 共用七段 UNet。" else "尚未升级统一 WAI 模型；当前旧普通 UNet 仍可正常使用。"
+                if(!LoraModelComponent.busy.get())LoraModelComponent.status=if(installed)"统一 WAI 模型已安装；alpha.5 将普通生图与 LoRA 固化为同一七段 UNet。" else "尚未安装统一 WAI 模型。"
                 catalog.removeAllViews()
                 result.onSuccess {entries->
                     if(entries.isEmpty())label("目录已创建，暂未发现 LoRA 文件。",parent=catalog)
                     entries.forEach {entry->
-                        label(entry.name,18f,catalog);label("${entry.bytes/1024/1024} MiB · ${entry.detail}",14f,catalog)
+                        val card=CardView(this).apply {radius=dp(16).toFloat();cardElevation=dp(2).toFloat();useCompatPadding=true}
+                        val body=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(12),dp(16),dp(12))}
+                        card.addView(body,ViewGroup.LayoutParams(-1,-2));catalog.addView(card,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(12)})
+                        label(entry.name,18f,body)
+                        history[entry.name]?.let {used->
+                            BitmapFactory.decodeFile(used.thumbnail.absolutePath)?.let {bitmap->
+                                body.addView(ImageView(this).apply {setImageBitmap(bitmap);adjustViewBounds=true;scaleType=ImageView.ScaleType.CENTER_CROP;contentDescription="${entry.name} 最近一次 LoRA 成图"},LinearLayout.LayoutParams(-1,dp(260)).apply{topMargin=dp(6);bottomMargin=dp(8)})
+                            }
+                            val time=SimpleDateFormat("MM-dd HH:mm",Locale.getDefault()).format(Date(used.lastUsedMs))
+                            val multi=if(used.loraCount>1)" · 本图含 ${used.loraCount} 个 LoRA" else ""
+                            label("上次使用：$time · 权重 ${used.weight} · Seed ${used.seed}$multi",14f,body)
+                            val te=if(used.ignoredTextEncoderModules>0)" · TE ${used.ignoredTextEncoderModules} 组未注入" else ""
+                            label("最近实机记录：UNet ${used.mappedModules} 组已注入$te",14f,body)
+                        } ?: label("尚无使用记录；首次成功成图后会在这里显示最近效果图。",14f,body)
+                        label("${entry.bytes/1024/1024} MiB · ${entry.detail}",14f,body)
                         if(entry.compatible) {
                             val current=prompt.text?.toString().orEmpty()
                             val selection=runCatching{LoraTags.parse(current).selections.firstOrNull{it.name==entry.name}}.getOrNull()
                             val inserted=selection!=null
                             val actionText=if(inserted)"弹出 ${entry.name} · ${selection!!.weight}" else "插入 ${entry.name} 标签"
-                            button(actionText,catalog,if(inserted)RinControls.Tone.GHOST else RinControls.Tone.SECONDARY) {
+                            button(actionText,body,if(inserted)RinControls.Tone.GHOST else RinControls.Tone.SECONDARY) {
                                 runCatching {
                                     val old=prompt.text?.toString().orEmpty()
                                     if(LoraTags.contains(old,entry.name)) {

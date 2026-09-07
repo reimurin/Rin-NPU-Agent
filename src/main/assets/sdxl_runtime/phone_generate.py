@@ -216,34 +216,40 @@ SDXL_RESOLUTIONS = [
 
 
 def _discover_available_resolutions() -> list[tuple[int, int]]:
-    """Scan context/ for WxH subdirectories that contain a full set of UNet+VAE contexts."""
-    ctx_root = f"{DR}/context"
-    available: list[tuple[int, int]] = []
-    if not os.path.isdir(ctx_root):
-        return available
-    needed = {"unet_encoder_fp16.serialized.bin.bin",
-              "unet_decoder_fp16.serialized.bin.bin",
-              "vae_decoder.serialized.bin.bin"}
+    """Discover native resolutions backed by complete legacy or unified QNN contexts."""
+    ctx_root=f"{DR}/context"
+    available:set[tuple[int,int]]=set()
+    if not os.path.isdir(ctx_root):return []
+    needed={"unet_encoder_fp16.serialized.bin.bin","unet_decoder_fp16.serialized.bin.bin","vae_decoder.serialized.bin.bin"}
     for entry in os.listdir(ctx_root):
-        if "x" not in entry:
-            continue
-        parts = entry.split("x")
-        if len(parts) != 2:
-            continue
-        try:
-            w, h = int(parts[0]), int(parts[1])
-        except ValueError:
-            continue
-        sub = os.path.join(ctx_root, entry)
-        if (64 <= w <= 8192 and 64 <= h <= 8192 and not w % 8 and not h % 8
-                and all(os.path.isfile(os.path.join(sub, n)) and os.path.getsize(os.path.join(sub, n)) > 0 for n in needed)):
-            available.append((w, h))
-    # Also check flat layout (legacy 1024×1024)
-    if all(os.path.isfile(os.path.join(ctx_root, n)) and os.path.getsize(os.path.join(ctx_root, n)) > 0 for n in needed):
-        if (1024, 1024) not in available:
-            available.append((1024, 1024))
-    available.sort(key=lambda r: r[0] * r[1])
-    return available
+        match=re.fullmatch(r"(\d+)x(\d+)",entry)
+        if not match:continue
+        w,h=map(int,match.groups());sub=os.path.join(ctx_root,entry)
+        if 64<=w<=8192 and 64<=h<=8192 and not w%8 and not h%8 and all(os.path.isfile(os.path.join(sub,n)) and os.path.getsize(os.path.join(sub,n))>0 for n in needed):available.add((w,h))
+    if all(os.path.isfile(os.path.join(ctx_root,n)) and os.path.getsize(os.path.join(ctx_root,n))>0 for n in needed):available.add((1024,1024))
+
+    unified_root=os.path.join(ctx_root,'lora')
+    if os.path.isdir(unified_root):
+        for entry in os.listdir(unified_root):
+            if entry=='wai-v170-sm8750-lora-r64-1024-partitioned-v1':w,h=1024,1024
+            else:
+                match=re.fullmatch(r'wai-v170-sm8750-lora-r64-(\d+)x(\d+)-partitioned-v1',entry)
+                if not match:continue
+                w,h=map(int,match.groups())
+            if not 64<=w<=8192 or not 64<=h<=8192 or w%8 or h%8:continue
+            folder=os.path.join(unified_root,entry);manifest_path=os.path.join(folder,'lora_template.json')
+            try:
+                if not os.path.isfile(manifest_path) or os.path.getsize(manifest_path)>8*1024*1024:continue
+                with open(manifest_path,'r',encoding='utf-8-sig') as f:manifest=json.load(f)
+                if manifest.get('schema')!=1 or manifest.get('complete') is not True or manifest.get('model_id')!=entry or manifest.get('resolution')!=[w,h] or manifest.get('rank_capacity')!=64:continue
+                parts=[p for stage in ('encoder','decoder') for p in manifest.get('graphs',{}).get(stage,{}).get('parts',[])]
+                if len(parts)!=7:continue
+                if any(p.get('context_file')!=p.get('id','')+'.bin' or not os.path.isfile(os.path.join(folder,p.get('context_file',''))) or os.path.getsize(os.path.join(folder,p.get('context_file','')))!=p.get('context_bytes') for p in parts):continue
+                scoped_vae=os.path.join(ctx_root,f'{w}x{h}','vae_decoder.serialized.bin.bin')
+                legacy_vae=os.path.join(ctx_root,'vae_decoder.serialized.bin.bin')
+                if os.path.isfile(scoped_vae) and os.path.getsize(scoped_vae)>0 or (w,h)==(1024,1024) and os.path.isfile(legacy_vae) and os.path.getsize(legacy_vae)>0:available.add((w,h))
+            except (OSError,ValueError,TypeError,KeyError):continue
+    return sorted(available,key=lambda r:(r[0]*r[1],r[0]))
 
 
 def _snap_to_nearest_resolution(
