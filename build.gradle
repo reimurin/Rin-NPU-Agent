@@ -73,7 +73,7 @@ android {
         unitTests.all {
             maxHeapSize = '2g'
             maxParallelForks = 1
-            systemProperty 'rin.render.dir', System.getenv('RIN_RENDER_DIR') ?: 'D:/CodexDownload/Rin_NPU_Agent/ui-review'
+            systemProperty 'rin.render.dir', System.getenv('RIN_RENDER_DIR') ?: file('../../toolchain/temp/integration-1.6-ui-review').absolutePath
             systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
             systemProperty 'maven.repo.local', 'H:/Rin_Android_NPU_Agent/toolchain/robolectric-maven'
         }
@@ -131,4 +131,4 @@ dependencies {
 
 
 // Generated output stays off the nearly-full source drive.
-layout.buildDirectory.set(file("build"))
+layout.buildDirectory.set(file("../../toolchain/temp/integration-1.6-gradle-build"))

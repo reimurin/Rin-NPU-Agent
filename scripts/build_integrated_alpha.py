@@ -11,18 +11,21 @@ env['JAVA_TOOL_OPTIONS']='-Djava.io.tmpdir='+str(out/'tmp')
 env['PATH']=str(tool/'jdk-17/bin')+os.pathsep+env.get('PATH','')
 flags=0x08000000|0x4000
 log=out/'build.log'
+probe_asset=app/'src/main/assets/sdxl_runtime/qnn_probe/libCalculator_skel.so'
+probe_sha='5f5f0ab9f1264c86f0fd8cdbd7873bb731bdcece6f7e91624d1a5ae8943e578e'
 def run(label,cmd,cwd=app):
  state(label)
  with log.open('a',encoding='utf-8') as f:
   p=subprocess.run(list(map(str,cmd)),cwd=cwd,env=env,stdout=f,stderr=subprocess.STDOUT,creationflags=flags,timeout=900)
  if p.returncode:raise RuntimeError(label+' rc='+str(p.returncode))
 try:
+ if not probe_asset.is_file() or probe_asset.stat().st_size!=5656 or hashlib.sha256(probe_asset.read_bytes()).hexdigest()!=probe_sha:raise RuntimeError('QNN probe asset missing or mismatched: '+str(probe_asset))
  state('NATIVE_BUILD')
  native=app/'native';run('NATIVE_BUILD',['cmd.exe','/d','/c',tool/'android-sdk/ndk/27.3.13750724/ndk-build.cmd','NDK_PROJECT_PATH='+str(native),'APP_BUILD_SCRIPT='+str(native/'jni/Android.mk'),'NDK_APPLICATION_MK='+str(native/'jni/Application.mk'),'NDK_OUT='+str(out/'native-obj'),'NDK_LIBS_OUT='+str(out/'native-libs'),'-j2'],native)
  so=out/'native-libs/arm64-v8a/librinqnnbridge.so';assert so.is_file();shutil.copy2(so,app/'src/main/jniLibs/arm64-v8a/librinqnnbridge.so')
  run('KOTLIN_TEST_AND_APK',[tool/'gradle-8.13/bin/gradle.bat','testDebugUnitTest','assembleDebug','--no-daemon','--max-workers=2','--console=plain','--stacktrace'])
  apk=out/'Rin-NPU-Agent-v1.6.0-alpha.4-debug-runtime-ready.apk'
- candidates=list((Path(r'D:\CodexDownload\Rin_NPU_Agent\integration-1.6-build\outputs\apk\debug')).glob('*.apk'));assert len(candidates)==1,candidates
+ candidates=list((app.parents[1]/'toolchain/temp/integration-1.6-gradle-build/outputs/apk/debug').glob('*.apk'));assert len(candidates)==1,candidates
  shutil.copy2(candidates[0],apk)
  state('DSP_AND_SIGNATURE')
  sys.path.insert(0,str(tool));import postprocess_dsp_apk as post
@@ -31,6 +34,8 @@ try:
  post.patch_apk(apk)
  report={'version':'1.6.0-alpha.4','code':21,'application_id':'com.geniex.demo','apk':str(apk),'bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'phone_tested':False}
  with zipfile.ZipFile(apk) as z:
+  probe=z.read('assets/sdxl_runtime/qnn_probe/libCalculator_skel.so');assert len(probe)==5656 and hashlib.sha256(probe).hexdigest()==probe_sha
+  report['qnn_probe_asset_sha256']=probe_sha
   assert b'Java_com_geniex_demo_image_QnnInProcessNative_runLoraSequence' in z.read('lib/arm64-v8a/librinqnnbridge.so')
   j=json.loads(z.read('assets/lora_selftest/manifest.json'))
   for f in j['assets']:assert hashlib.sha256(z.read('assets/lora_selftest/'+f['name'])).hexdigest()==f['sha256'],f['name']
