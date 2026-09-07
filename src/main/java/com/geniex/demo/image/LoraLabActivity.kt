@@ -81,14 +81,14 @@ class LoraLabActivity:AppCompatActivity() {
             else runCatching{startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:$packageName")))}
                 .onFailure{startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))}
         }
-        label("LoRA 生图组件",21f)
-        label("SM8750 · 原生 1024 × 1024\n组件约 7.14 GiB，建议额外预留 11 GiB 安装与缓存空间。按需安装，原底模保留；不使用 LoRA 时不必下载。",14f)
+        label("统一 WAI 模型（普通生图 + LoRA）",21f)
+        label("SM8750 · 原生 1024 × 1024\n升级载荷 7,662,304,830 bytes（7.14 GiB）；升级阶段临时峰值约 9.50 GiB。激活后普通生图与 LoRA 共用同一套七段 UNet。旧两段 UNet 共 5,256,428,704 bytes（4.90 GiB）先保留作回滚点；实机质量与速度通过后再释放。按当前 CLIP-G 修复基线估算，清理旧 UNet 后整个 runtime 约 9.17 GiB。",14f)
         componentStatus=label(LoraModelComponent.status)
-        installButton=button("安装 / 继续下载 LoRA 组件") {
+        installButton=button("安装 / 继续升级统一模型") {
             if(!StorageAccess.granted()){LoraModelComponent.status="请先授予文件访问权限";return@button}
             if(LoraSelfTest.busy.get()){LoraModelComponent.status="请等待 NPU 自测结束";return@button}
-            RinControls.dialog(this).setTitle("准备 LoRA 生图组件")
-                .setMessage("下载约 7.14 GiB，仅新增 LoRA 组件，不覆盖原底模。支持暂停续传；完成后可返回原生图页测试兼容 LoRA。")
+            RinControls.dialog(this).setTitle("升级到支持 LoRA 的统一 WAI 模型")
+                .setMessage("下载并校验 7.14 GiB 的新统一 UNet 到 staging；不会提前删除旧模型。alpha.4 实机验收通过后再释放旧 UNet。")
                 .setNegativeButton("取消",null).setPositiveButton("开始 / 继续") {_,_->
                     LoraModelComponent.install(this,base) { message->runOnUiThread {
                         if(pageReady&&!isFinishing&&!isDestroyed)componentStatus.text=message
@@ -147,7 +147,7 @@ class LoraLabActivity:AppCompatActivity() {
             runOnUiThread {
                 scanning.set(false)
                 if(!pageReady||isFinishing||isDestroyed)return@runOnUiThread
-                if(!LoraModelComponent.busy.get())LoraModelComponent.status=if(installed)"LoRA 生图组件已安装；真实效果请用固定种子对比验证。" else "尚未安装 LoRA 生图组件，原底模仍可正常使用。"
+                if(!LoraModelComponent.busy.get())LoraModelComponent.status=if(installed)"统一 WAI 模型已安装；旧 UNet 暂保留回滚，alpha.4 激活后普通生图与 LoRA 共用七段 UNet。" else "尚未升级统一 WAI 模型；当前旧普通 UNet 仍可正常使用。"
                 catalog.removeAllViews()
                 result.onSuccess {entries->
                     if(entries.isEmpty())label("目录已创建，暂未发现 LoRA 文件。",parent=catalog)

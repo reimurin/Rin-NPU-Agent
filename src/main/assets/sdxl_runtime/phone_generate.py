@@ -32,7 +32,7 @@ import time
 
 import numpy as np
 from phone_runtime_accel import RuntimeTensorArena, get_runtime_accel
-from rin_lora import prepare as prepare_lora, LoraError
+from rin_unified import prepare as prepare_lora, LoraError
 _ACTIVE_LORA_SESSION = None
 from rin_tensor_io import (named_input, resolve_output, read_float_output, output_records,
                            write_input_rows, validate_input_list, prepare_output_dir, validate_output_tree)

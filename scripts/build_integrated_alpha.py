@@ -21,7 +21,7 @@ try:
  native=app/'native';run('NATIVE_BUILD',['cmd.exe','/d','/c',tool/'android-sdk/ndk/27.3.13750724/ndk-build.cmd','NDK_PROJECT_PATH='+str(native),'APP_BUILD_SCRIPT='+str(native/'jni/Android.mk'),'NDK_APPLICATION_MK='+str(native/'jni/Application.mk'),'NDK_OUT='+str(out/'native-obj'),'NDK_LIBS_OUT='+str(out/'native-libs'),'-j2'],native)
  so=out/'native-libs/arm64-v8a/librinqnnbridge.so';assert so.is_file();shutil.copy2(so,app/'src/main/jniLibs/arm64-v8a/librinqnnbridge.so')
  run('KOTLIN_TEST_AND_APK',[tool/'gradle-8.13/bin/gradle.bat','testDebugUnitTest','assembleDebug','--no-daemon','--max-workers=2','--console=plain','--stacktrace'])
- apk=out/'Rin-NPU-Agent-v1.6.0-alpha.3-debug-runtime-ready.apk'
+ apk=out/'Rin-NPU-Agent-v1.6.0-alpha.4-debug-runtime-ready.apk'
  candidates=list((Path(r'D:\CodexDownload\Rin_NPU_Agent\integration-1.6-build\outputs\apk\debug')).glob('*.apk'));assert len(candidates)==1,candidates
  shutil.copy2(candidates[0],apk)
  state('DSP_AND_SIGNATURE')
@@ -29,7 +29,7 @@ try:
  post.TOOL=out/'postprocess'
  post.run_checked=lambda cmd:run('DSP_AND_SIGNATURE',cmd)
  post.patch_apk(apk)
- report={'version':'1.6.0-alpha.3','code':20,'application_id':'com.geniex.demo','apk':str(apk),'bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'phone_tested':False}
+ report={'version':'1.6.0-alpha.4','code':21,'application_id':'com.geniex.demo','apk':str(apk),'bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'phone_tested':False}
  with zipfile.ZipFile(apk) as z:
   assert b'Java_com_geniex_demo_image_QnnInProcessNative_runLoraSequence' in z.read('lib/arm64-v8a/librinqnnbridge.so')
   j=json.loads(z.read('assets/lora_selftest/manifest.json'))
