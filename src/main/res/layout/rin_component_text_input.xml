@@ -2,5 +2,7 @@
 <com.google.android.material.textfield.TextInputLayout xmlns:android="http://schemas.android.com/apk/res/android"
     style="@style/Widget.Rin.TextInputLayout" android:layout_width="match_parent" android:layout_height="wrap_content">
     <com.google.android.material.textfield.TextInputEditText android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:textColor="@color/rin_text_primary" android:textSize="15sp" android:padding="14dp" />
+        android:textColor="@color/rin_text_primary" android:textSize="15sp"
+        android:paddingStart="14dp" android:paddingEnd="14dp"
+        android:paddingTop="28dp" android:paddingBottom="10dp" />
 </com.google.android.material.textfield.TextInputLayout>
