@@ -207,14 +207,14 @@ def finalize_seven_manifest(job_root: Path, width: int, height: int) -> dict:
     return manifest
 
 
-def compile_seven(source: Path, app_root: Path, sdk_root: Path, job_root: Path) -> dict:
+def compile_seven(source: Path, app_root: Path, sdk_root: Path, job_root: Path, width: int, height: int) -> dict:
     status = job_root / "status.json"
     if job_root.exists():
         if status.is_file() and json.loads(status.read_text(encoding="utf-8")).get("stage") == "COMPLETE_OFFLINE":
             return json.loads((job_root / "package/lora_template.json").read_text(encoding="utf-8"))
         raise RuntimeError(f"Existing incomplete seven-part job; inspect instead of resubmitting: {job_root}")
     compiler = app_root / "model_tools/partitioned/compile_partitioned_contexts.py"
-    command = [sys.executable, "-B", str(compiler), "--source", str(source), "--sdk", str(sdk_root), "--out", str(job_root), "--capacity", "64"]
+    command = [sys.executable, "-B", str(compiler), "--source", str(source), "--sdk", str(sdk_root), "--out", str(job_root), "--capacity", "64", "--resolution", f"{width}x{height}"]
     run_logged(command, job_root.parent / "seven_compile.log", cwd=compiler.parent, timeout=24 * 3600)
     return json.loads((job_root / "package/lora_template.json").read_text(encoding="utf-8"))
 
@@ -294,7 +294,7 @@ def main() -> int:
 
         state(root, "COMPILE_SEVEN")
         seven_root = root / "seven"
-        compile_seven(split_dir, app_root, sdk_root, seven_root)
+        compile_seven(split_dir, app_root, sdk_root, seven_root, width, height)
         manifest = finalize_seven_manifest(seven_root, width, height)
 
         state(root, "COMPILE_VAE")

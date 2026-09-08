@@ -10,6 +10,7 @@ sys.path[:0]=[str(ROOT/'src/main/assets/sdxl_runtime'),str(ROOT/'model_tools/par
 import rin_lora as common
 import rin_lora_partitioned as runtime
 from independent_lora import inject
+from compile_partitioned_contexts import bind as compiler_bind
 from rin_tensor_io import write_input_rows,read_float_output,MANIFEST_NAME
 
 class Tests(unittest.TestCase):
@@ -159,6 +160,13 @@ class Tests(unittest.TestCase):
  def test_24_nonfinite_adapter_rejected(self):
   file=self.adapter();weights=common.SafeWeights(file);values={k:weights.read(k) for k in weights.tensors};values['sgm_encoder_p0.lora_down.weight'][0,0]=np.nan;save_file(values,str(file))
   with self.assertRaises(common.LoraError):self.plan()
+
+ def test_25_compiler_explicit_permute_binding(self):
+  records=[{'name':'skip_7','shape':[1,1280,38,26]}]
+  direct={'skip_7_permute':{'dimensions':[1,1280,38,26],'dataType':'QNN_DATATYPE_FLOAT_16'}}
+  bindings,used=compiler_bind(records,direct);self.assertEqual(used,{'skip_7_permute'});self.assertEqual(bindings[0]['name'],'skip_7_permute');self.assertEqual(bindings[0]['to_qnn_axes'],[0,1,2,3])
+  nhwc={'skip_7_permute':{'dimensions':[1,38,26,1280],'dataType':'QNN_DATATYPE_FLOAT_32'}}
+  bindings,used=compiler_bind(records,nhwc);self.assertEqual(used,{'skip_7_permute'});self.assertEqual(bindings[0]['to_qnn_axes'],[0,2,3,1])
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--out',required=True);args=p.parse_args();OUT=Path(args.out)
