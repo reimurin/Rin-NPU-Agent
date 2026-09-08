@@ -32,7 +32,7 @@ import time
 
 import numpy as np
 from phone_runtime_accel import RuntimeTensorArena, get_runtime_accel
-from rin_unified import prepare as prepare_lora, LoraError
+from rin_unified import prepare as prepare_lora, LoraError, shared_resolutions, shared_runtime
 _ACTIVE_LORA_SESSION = None
 from rin_tensor_io import (named_input, resolve_output, read_float_output, output_records,
                            write_input_rows, validate_input_list, prepare_output_dir, validate_output_tree)
@@ -218,7 +218,7 @@ SDXL_RESOLUTIONS = [
 def _discover_available_resolutions() -> list[tuple[int, int]]:
     """Discover native resolutions backed by complete legacy or unified QNN contexts."""
     ctx_root=f"{DR}/context"
-    available:set[tuple[int,int]]=set()
+    available:set[tuple[int,int]]=set(shared_resolutions(DR))
     if not os.path.isdir(ctx_root):return []
     needed={"unet_encoder_fp16.serialized.bin.bin","unet_decoder_fp16.serialized.bin.bin","vae_decoder.serialized.bin.bin"}
     for entry in os.listdir(ctx_root):
@@ -303,6 +303,11 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
         "clip_l": f"{DR}/context/clip_l.serialized.bin.bin",
         "clip_g": f"{DR}/context/clip_g.serialized.bin.bin",
     }
+
+    shared = shared_runtime(DR, width, height)
+    if shared:
+        ctx.update({"encoder": shared["encoder"], "decoder": shared["decoder"], "vae": shared["vae"], "vae_graph": shared["graph"]})
+        return ctx
 
     slot = SDXL_QNN_LORA_SLOT
     res_dir = f"{DR}/context/{width}x{height}"
@@ -2076,7 +2081,8 @@ def _write_qnn_diagnostic(*, stage: str, cmd: list[str], env: dict, returncode: 
 
 
 def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_dir: str,
-                    native_input: bool, native_output: bool, persistent_context: bool = False) -> tuple[float, dict]:
+                    native_input: bool, native_output: bool, persistent_context: bool = False,
+                    graph_name: str = "") -> tuple[float, dict]:
     if QNN_BRIDGE_PORT <= 0:
         raise RuntimeError("QNN in-process bridge port is not configured")
     request = {
@@ -2088,6 +2094,7 @@ def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_d
         "native_input": bool(native_input),
         "native_output": bool(native_output),
         "persistent_context": bool(persistent_context),
+        "graph_name": str(graph_name or ""),
     }
     payload = (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
     with socket.create_connection(("127.0.0.1", QNN_BRIDGE_PORT), timeout=10.0) as sock:
@@ -2115,9 +2122,11 @@ def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_d
 
 def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
             native_input=False, backend=None, model_path=None, config_file=None,
-            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None):
+            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None, graph_name=""):
     options = dict(backend=backend, model_path=model_path, config_file=config_file,
                    use_mmap=use_mmap, perf_profile=perf_profile, net_run_path=net_run_path, profile_tag=profile_tag)
+    if graph_name:
+        options["graph_name"] = graph_name
     selector = getattr(_ACTIVE_LORA_SESSION, "stage_for", None)
     stage = selector(ctx_path) if callable(selector) and ctx_path is not None else None
     if stage is not None:
@@ -2132,7 +2141,7 @@ def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
 def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
             native_input=False, backend=None, model_path=None, config_file=None,
             use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None,
-            persistent_context=False):
+            persistent_context=False, graph_name=""):
     """Run QNN context on NPU via qnn-net-run."""
     if ctx_path is None and model_path is None:
         raise ValueError("qnn_run needs either ctx_path or model_path")
@@ -2169,6 +2178,7 @@ def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
                 native_input=native_input,
                 native_output=native,
                 persistent_context=persistent_context,
+                graph_name=graph_name,
             )
             output_count = validate_output_tree(output_dir, result_count)
             _log(f"[QNN OUTPUT OK] stage={stage} results={result_count} tensors={output_count}")
@@ -2192,6 +2202,8 @@ def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
         )
         return bridge_ms
 
+    if graph_name and effective_ctx_path is not None:
+        raise RuntimeError("Shared multi-graph context requires the in-process QNN bridge")
     if QNN_BRIDGE_REQUIRED and effective_ctx_path is not None and _is_htp_backend(backend_lib):
         raise RuntimeError("QNN in-process bridge is required but unavailable")
 
@@ -3156,7 +3168,7 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     _prepare_vae_input(latents, scaling_factor).tofile(f"{vd}/lat.raw")
     _write_input_list_once(f"{vd}/il.txt", [named_input("latent", f"{vd}/lat.raw")])
     # JNI converts model FP16 output to a documented FLOAT_ONLY file.
-    ms_vae = qnn_run(CONTEXTS["vae"], f"{vd}/il.txt", f"{vd}/out", native=False, profile_tag="vae_final")
+    ms_vae = qnn_run(CONTEXTS["vae"], f"{vd}/il.txt", f"{vd}/out", native=False, profile_tag="vae_final", graph_name=CONTEXTS.get("vae_graph", ""))
     _log(f"[VAE] {ms_vae:.0f}ms")
     img = _read_vae_image(f"{vd}/out", height, width)
     img = np.clip(img / 2 + 0.5, 0, 1)

@@ -246,4 +246,67 @@
     <string name="runtime_download_notification_channel">Image runtime downloads</string>
     <string name="runtime_download_notification_channel_desc">Background download and installation progress for the local image runtime</string>
     <string name="runtime_download_notification_title">Rin image runtime</string>
+
+    <string name="back">Back</string>
+    <string name="model_update_title">Model &amp; updates</string>
+    <string name="model_update_app_version">Rin NPU Agent %1$s</string>
+    <string name="model_update_device_section">DEVICE TARGET</string>
+    <string name="model_update_device_hint">The model pack is matched to the current SoC / QNN target before download.</string>
+    <string name="model_update_package_section">MODEL PACK</string>
+    <string name="model_update_source_section">DOWNLOAD SOURCE</string>
+    <string name="model_update_source_hint">Auto prefers the China mirror for mainland China and GitHub elsewhere; either source falls back to the other.</string>
+    <string name="model_source_auto">Auto</string>
+    <string name="model_source_github">GitHub original</string>
+    <string name="model_source_china">China mirror · ModelScope</string>
+    <string name="model_update_check_now">Check again</string>
+    <string name="model_update_install">Update model pack</string>
+    <string name="model_update_cancel">Cancel current task</string>
+    <string name="model_update_idle">No update check has run yet.</string>
+    <string name="model_update_local_none">Current model pack: legacy / not versioned</string>
+    <string name="model_update_local_version">Current model pack: %1$s</string>
+    <string name="model_update_resolution_none">Installed resolutions: detected from legacy runtime</string>
+    <string name="model_update_resolutions">Installed resolutions: %1$s</string>
+    <string name="model_update_remote_resolutions">Available after update: %1$s</string>
+    <string name="model_update_size">Update size: %1$s</string>
+    <string name="model_update_size_unknown">Update size: not provided by remote index</string>
+    <string name="model_update_lora_unknown">LoRA ABI: legacy / not versioned</string>
+    <string name="model_update_lora_abi">LoRA ABI: %1$s</string>
+    <string name="model_update_lora_rank">Dynamic LoRA: rank %1$d · ABI %2$s</string>
+    <string name="model_update_remote_checking">Remote model pack: checking…</string>
+    <string name="model_update_remote_version">Remote model pack: %1$s</string>
+    <string name="model_update_remote_none">Remote model pack: none</string>
+    <string name="model_update_remote_unavailable">Remote model pack: unavailable</string>
+    <string name="model_update_checking">Checking SoC/NPU match and model-pack version…</string>
+    <string name="model_update_up_to_date">The installed model pack already matches the latest compatible version.</string>
+    <string name="model_update_not_installed">not installed</string>
+    <string name="model_update_available">Compatible model update available: %1$s → %2$s</string>
+    <string name="model_update_app_required">Model pack %1$s requires a newer app runtime. The current model can keep being used.</string>
+    <string name="model_update_check_failed">Update check failed: %1$s</string>
+    <string name="model_update_source_used">Source used for this check: %1$s</string>
+    <string name="model_update_downloading">Downloading NPU model update…</string>
+    <string name="model_update_starting">Preparing model pack %1$s…</string>
+    <string name="model_update_download_progress">File %1$d/%2$d · %3$s
+%4$s / %5$s · %6$s · %7$s</string>
+    <string name="model_update_verifying">Verifying %1$s…</string>
+    <string name="model_update_switching">Activating model pack %1$s…</string>
+    <string name="model_update_complete">Model pack updated. Resolution choices will refresh from its manifest.</string>
+    <string name="model_update_install_failed">Model update failed: %1$s</string>
+    <string name="model_update_cancelled">Download cancelled. Partial data is kept for resume.</string>
+    <string name="model_update_drawer_section">MODEL &amp; UPDATES</string>
+    <string name="model_update_drawer_hint">Check the NPU model version, supported resolutions and download source.</string>
+    <string name="model_update_open">Check / update model</string>
+    <string name="model_update_prompt_title">NPU model update available</string>
+    <string name="model_update_prompt_message">A compatible model pack update is available: %1$s → %2$s
+Update size: %3$s
+New resolution choices are read dynamically from the downloaded model manifest.</string>
+    <string name="model_update_later">Not now</string>
+    <string name="model_update_now">Update</string>
+    <string name="model_update_app_prompt_title">New model pack needs a newer app</string>
+    <string name="model_update_app_prompt_message">Model pack %1$s (%2$s) is available, but this app runtime is too old for it. You can keep using the current model pack.</string>
+    <string name="model_update_ignore_version">Ignore this version</string>
+    <string name="model_update_ignored">Startup reminders for model pack %1$s are ignored. You can still update it manually here.</string>
+    <string name="model_update_check_cancelled">This model check was cancelled. Automatic checks can run again on the next launch.</string>
+    <string name="model_update_remote_cancelled">Remote model pack: check cancelled</string>
+    <string name="model_update_last_check_none">Last check: not checked yet</string>
+    <string name="model_update_last_check">Last check: %1$s</string>
 </resources>

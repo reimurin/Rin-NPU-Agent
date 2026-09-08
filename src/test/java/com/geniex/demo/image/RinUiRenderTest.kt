@@ -1,5 +1,10 @@
 package com.geniex.demo.image
 import android.app.Application
+import android.content.Intent
+import com.geniex.demo.databinding.ActivityModelUpdateBinding
+import com.geniex.demo.R
+import androidx.core.view.GravityCompat
+import android.view.LayoutInflater
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
@@ -52,4 +57,44 @@ class RinUiRenderTest {
         capture(c.get().window.decorView,"lora_management",824,1784)
         assertNull(c.get().window.decorView.findViewWithTag<View>("startup_recovery"));c.pause().stop().destroy()
     }
+    @Test fun nativeModelUpdateActivityRendersWithoutNetwork() {
+        val intent=Intent().putExtra(ModelUpdateActivity.EXTRA_SKIP_AUTO_CHECK,true)
+        val c=Robolectric.buildActivity(ModelUpdateActivity::class.java,intent).setup().visible()
+        capture(c.get().window.decorView,"alpha6_model_update_activity",824,1784)
+        assertEquals(View.VISIBLE,c.get().findViewById<View>(R.id.btn_update_check).visibility)
+        assertEquals(View.GONE,c.get().findViewById<View>(R.id.btn_update_ignore).visibility)
+        assertTrue(c.get().findViewById<View>(R.id.tv_update_last_check).measuredHeight>0)
+        c.pause().stop().destroy()
+    }
+    @Test fun nativeAlpha6ModelUpdateAndDrawerRenders() {
+        val c=Robolectric.buildActivity(PresetTestActivity::class.java).setup().visible();val a=c.get()
+        val b=ActivityModelUpdateBinding.inflate(a.layoutInflater);a.setContentView(b.root)
+        b.tvUpdateAppVersion.text="Rin NPU Agent 1.6.0-alpha.6"
+        b.tvUpdateDevice.text="SM8750 · QNN SoC 69 · V79 · Snapdragon 8 Elite"
+        b.tvUpdateLocal.text="当前模型包：1.0.0（本地三分辨率共享权重版本）"
+        b.tvUpdateRemote.text="远端模型包：1.1.0"
+        b.tvUpdateResolutions.text="更新后可用：1024 × 1024、832 × 1216、1216 × 832、768 × 1344、1344 × 768"
+        b.tvUpdateLora.text="动态 LoRA：rank 64 · ABI e362a2fcf8b5c5af928c2db7fd594232720501345c08ef1b5dfce4acb19e7d18"
+        b.tvUpdateSize.text="更新大小：5.49 GiB"
+        b.tvUpdateSourceUsed.text="自动模式：中国大陆优先魔搭镜像，失败自动回退 GitHub 原始源。"
+        b.tvUpdateStatus.text="发现兼容模型更新。这里使用较长中文状态文本验证高 DPI、中文换行、状态信息与按钮之间不会发生重叠或裁切。下载过程中还会显示文件序号、总进度、速度和实际使用的镜像源。"
+        b.btnUpdateCancel.visibility=View.VISIBLE
+        capture(b.root,"alpha6_model_update_top",824,1784)
+        layout(b.root,824,1784);shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+        assertTrue(b.btnUpdateCheck.height>=80);assertTrue(b.btnUpdateInstall.height>=80);assertTrue(b.btnUpdateCancel.measuredHeight>=70)
+        assertTrue(b.tvUpdateStatus.measuredHeight>0);assertTrue(b.tvUpdateResolutions.measuredHeight>0);assertTrue(b.tvUpdateLora.measuredHeight>0);assertTrue(b.tvUpdateSize.measuredHeight>0)
+        b.modelUpdateScroll.fullScroll(View.FOCUS_DOWN);shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(120));capture(b.root,"alpha6_model_update_bottom",824,1784)
+        c.pause().stop().destroy()
+
+        val dc=Robolectric.buildActivity(PresetTestActivity::class.java).setup().visible();val da=dc.get()
+        val drawer=LayoutInflater.from(da).inflate(R.layout.activity_main,null,false);da.setContentView(drawer)
+        layout(drawer,824,1784)
+        val drawerLayout=drawer.findViewById<androidx.drawerlayout.widget.DrawerLayout>(R.id.drawer_layout)
+        val update=drawer.findViewById<View>(R.id.btn_model_update)
+        assertNotNull(update);drawerLayout.openDrawer(GravityCompat.START);shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(220))
+        assertEquals(View.VISIBLE,update.visibility);assertTrue(update.measuredHeight>=70)
+        capture(drawer,"alpha6_drawer_model_update",824,1784)
+        dc.pause().stop().destroy()
+    }
+
 }

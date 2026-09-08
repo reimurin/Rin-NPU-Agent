@@ -192,7 +192,8 @@ Java_com_geniex_demo_image_QnnInProcessNative_runContextPersistent(
     jstring inputListPathJ,
     jstring outputDirJ,
     jboolean nativeInput,
-    jboolean nativeOutput) {
+    jboolean nativeOutput,
+    jstring graphNameJ) {
   std::lock_guard<std::mutex> lock(gRunMutex);
   const auto started = std::chrono::steady_clock::now();
   clearNativeLog();
@@ -202,6 +203,7 @@ Java_com_geniex_demo_image_QnnInProcessNative_runContextPersistent(
   const std::string contextPath = JUtfString(env, contextPathJ).str();
   const std::string inputListPath = JUtfString(env, inputListPathJ).str();
   const std::string outputDir = JUtfString(env, outputDirJ).str();
+  const std::string graphName = JUtfString(env, graphNameJ).str();
   const bool nativeInputValue = nativeInput == JNI_TRUE;
   const bool nativeOutputValue = nativeOutput == JNI_TRUE;
 
@@ -299,6 +301,11 @@ Java_com_geniex_demo_image_QnnInProcessNative_runContextPersistent(
                       backendBuild,
                       operationLog);
   };
+
+  stage = "persistent_select_graph";
+  if (session->app->rinSelectGraph(graphName) != RinPersistentAppStatus::SUCCESS) {
+    return evictOnFailure(stage, session->app->getLastExecutionDetail());
+  }
 
   stage = "persistent_set_io";
   if (session->app->rinSetRunIO(inputListPath, outputDir) !=

@@ -131,7 +131,8 @@ Java_com_geniex_demo_image_QnnInProcessNative_runContext(
     jstring inputListPathJ,
     jstring outputDirJ,
     jboolean nativeInput,
-    jboolean nativeOutput) {
+    jboolean nativeOutput,
+    jstring graphNameJ) {
   std::lock_guard<std::mutex> lock(gRunMutex);
   const auto started = std::chrono::steady_clock::now();
   clearNativeLog();
@@ -141,6 +142,7 @@ Java_com_geniex_demo_image_QnnInProcessNative_runContext(
   const std::string contextPath = JUtfString(env, contextPathJ).str();
   const std::string inputListPath = JUtfString(env, inputListPathJ).str();
   const std::string outputDir = JUtfString(env, outputDirJ).str();
+  const std::string graphName = JUtfString(env, graphNameJ).str();
 
   auto elapsedMs = [&]() -> double {
     return std::chrono::duration<double, std::milli>(
@@ -267,6 +269,12 @@ Java_com_geniex_demo_image_QnnInProcessNative_runContext(
       detail = "QnnSampleApp::finalizeGraphs failed";
       goto cleanup;
     }
+  }
+
+  stage = "select_graph";
+  if (app->rinSelectGraph(graphName) != AppStatus::SUCCESS) {
+    detail = app->getLastExecutionDetail();
+    goto cleanup;
   }
 
   stage = "execute_graphs";

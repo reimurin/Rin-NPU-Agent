@@ -689,12 +689,5 @@ class ImageGenerationRuntime(private val context: Context) {
         private const val LEGACY_BAD_CLIP_G_BYTES = 42_991_616L
         private const val LEGACY_BAD_CLIP_G_SHA256 = "604c9dd468ca74553138502d1e32b18129b6671cc91c68f0213403ae769bc2d4"
         private val DRIVER_FILES = listOf("phone_generate.py", "phone_runtime_accel.py", "rin_tensor_io.py", "rin_lora.py", "rin_lora_module_banks.py", "rin_lora_partitioned.py", "rin_unified.py")
-        val UI_RESOLUTIONS = listOf(
-            ImageResolution(1024, 1024),
-            ImageResolution(1216, 832),
-            ImageResolution(832, 1216),
-            ImageResolution(1344, 768),
-            ImageResolution(768, 1344),
-        )
     }
 }

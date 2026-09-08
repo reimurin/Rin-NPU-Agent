@@ -63,6 +63,10 @@ import com.geniex.demo.history.ProjectSessionStore
 import com.geniex.demo.history.StoredConversation
 import com.geniex.demo.history.StoredProject
 import com.geniex.demo.image.ImageModeController
+import com.geniex.demo.image.ModelPackUpdateManager
+import com.geniex.demo.image.ModelUpdateActivity
+import com.geniex.demo.image.ModelUpdateCheck
+import com.geniex.demo.image.RinControls
 import com.geniex.demo.model.ModelLibraryActivity
 import com.geniex.demo.model.RecommendedModels
 import com.geniex.demo.model.TestModelSeeder
@@ -167,6 +171,7 @@ class MainActivity : FragmentActivity() {
     private var currentConversationId: String = ""
     private var crossConversationReadAuthorized = false
     private lateinit var imageModeController: ImageModeController
+    private var startupModelUpdateChecked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -185,7 +190,53 @@ class MainActivity : FragmentActivity() {
         setupAgentUi()
         imageModeController = ImageModeController(this, binding, ::releaseChatRuntimeForImage)
         imageModeController.setup()
+        checkModelPackUpdateOnLaunch()
         handleIncomingShare(intent)
+    }
+
+    private fun checkModelPackUpdateOnLaunch() {
+        if (startupModelUpdateChecked) return
+        startupModelUpdateChecked = true
+        val updater = ModelPackUpdateManager(this)
+        updater.checkAsync { result ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                when (result) {
+                    is ModelUpdateCheck.UpdateAvailable -> {
+                        val local = result.local?.version ?: getString(R.string.model_update_not_installed)
+                        RinControls.dialog(this)
+                            .setTitle(R.string.model_update_prompt_title)
+                            .setMessage(getString(R.string.model_update_prompt_message, local, result.remote.version, formatModelUpdateBytes(result.remote.totalDownloadBytes)))
+                            .setNegativeButton(R.string.model_update_later, null)
+                            .setNeutralButton(R.string.model_update_ignore_version) { _, _ -> updater.ignoreVersion(result.remote) }
+                            .setPositiveButton(R.string.model_update_now) { _, _ ->
+                                startActivity(Intent(this, ModelUpdateActivity::class.java).putExtra(ModelUpdateActivity.EXTRA_AUTO_INSTALL, true))
+                            }
+                            .show()
+                    }
+                    is ModelUpdateCheck.AppUpdateRequired -> {
+                        RinControls.dialog(this)
+                            .setTitle(R.string.model_update_app_prompt_title)
+                            .setMessage(getString(R.string.model_update_app_prompt_message, result.remote.version, formatModelUpdateBytes(result.remote.totalDownloadBytes)))
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .setNeutralButton(R.string.model_update_ignore_version) { _, _ -> updater.ignoreVersion(result.remote) }
+                            .setPositiveButton(R.string.model_update_open) { _, _ -> startActivity(Intent(this, ModelUpdateActivity::class.java)) }
+                            .show()
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    private fun formatModelUpdateBytes(bytes: Long): String {
+        val value = bytes.coerceAtLeast(0L).toDouble()
+        return when {
+            value >= 1073741824.0 -> String.format(Locale.US, "%.2f GiB", value / 1073741824.0)
+            value >= 1048576.0 -> String.format(Locale.US, "%.1f MiB", value / 1048576.0)
+            value >= 1024.0 -> String.format(Locale.US, "%.1f KiB", value / 1024.0)
+            else -> "${bytes.coerceAtLeast(0L)} B"
+        }
     }
 
     private fun setupProjectConversationUi() {
@@ -1151,6 +1202,10 @@ class MainActivity : FragmentActivity() {
         binding.btnModelLibrary.setOnClickListener {
             binding.drawerLayout.closeDrawer(GravityCompat.START)
             startActivity(Intent(this, ModelLibraryActivity::class.java))
+        }
+        binding.btnModelUpdate.setOnClickListener {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            startActivity(Intent(this, ModelUpdateActivity::class.java))
         }
         binding.btnQuickInstallModel.setOnClickListener {
             binding.drawerLayout.closeDrawer(GravityCompat.START)

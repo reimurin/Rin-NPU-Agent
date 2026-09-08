@@ -26,6 +26,7 @@ internal object QnnInProcessNative {
         outputDir: String,
         nativeInput: Boolean,
         nativeOutput: Boolean,
+        graphName: String,
     ): String
 
     external fun runContextPersistent(
@@ -36,6 +37,7 @@ internal object QnnInProcessNative {
         outputDir: String,
         nativeInput: Boolean,
         nativeOutput: Boolean,
+        graphName: String,
     ): String
 
     external fun releasePersistentContexts(): String
@@ -147,6 +149,7 @@ internal class QnnInProcessBridgeServer(
         val nativeInput = req.optBoolean("native_input", false)
         val nativeOutput = req.optBoolean("native_output", false)
         val persistentContext = req.optBoolean("persistent_context", false)
+        val graphName = req.optString("graph_name", "")
         val stage = req.optString("stage", "qnn")
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val backend = File(nativeDir, "libQnnHtp.so")
@@ -159,7 +162,7 @@ internal class QnnInProcessBridgeServer(
                 .toString()
         }
         File(outputDir).mkdirs()
-        appendLog("REQUEST stage=$stage ctx=$ctx input=$inputList out=$outputDir nativeIn=$nativeInput nativeOut=$nativeOutput persistent=$persistentContext")
+        appendLog("REQUEST stage=$stage ctx=$ctx graph=${graphName.ifBlank { "<default>" }} input=$inputList out=$outputDir nativeIn=$nativeInput nativeOut=$nativeOutput persistent=$persistentContext")
         val started = System.nanoTime()
         return try {
             val raw = if (persistentContext) {
@@ -171,6 +174,7 @@ internal class QnnInProcessBridgeServer(
                     outputDir,
                     nativeInput,
                     nativeOutput,
+                    graphName,
                 )
             } else {
                 QnnInProcessNative.runContext(
@@ -181,6 +185,7 @@ internal class QnnInProcessBridgeServer(
                     outputDir,
                     nativeInput,
                     nativeOutput,
+                    graphName,
                 )
             }
             val elapsed = (System.nanoTime() - started) / 1_000_000.0

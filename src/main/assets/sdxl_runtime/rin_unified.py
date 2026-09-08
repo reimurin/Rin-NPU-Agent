@@ -6,7 +6,7 @@ existing 1024x1024 component keeps its historical model id/path.  Additional
 native resolutions use their own model id, activation marker and matrix cache.
 """
 from pathlib import Path
-import hashlib,json,math,shutil,uuid
+import hashlib,json,math,shutil,uuid,re
 import numpy as np
 import rin_lora as legacy
 import rin_lora_partitioned as part
@@ -14,6 +14,79 @@ from rin_lora import LoraError,Plan,digest
 
 ACTIVATION_FILE='activation.json'
 LEGACY_MEMORY_ROLLBACK_PREFIX='alpha4_persistent_memory_rollback'
+
+SHARED_PACK_ROOT='context/model_packs'
+SHARED_PACK_SCHEMA=1
+SHARED_RUNTIME_ABI=1
+
+
+def _shared_pack_candidates(base):
+    root=part.inside(Path(base).resolve(),SHARED_PACK_ROOT)
+    if not root.is_dir():return []
+    folders=[];pointer=root/'current.json';current_selected=False
+    try:
+        if pointer.is_file() and pointer.stat().st_size<64*1024:
+            current=part.read_json(pointer,64*1024).get('directory','')
+            if isinstance(current,str) and current and '..' not in Path(current).parts:
+                chosen=part.inside(root,current)
+                if chosen.is_dir():folders.append(chosen);current_selected=True
+    except (OSError,ValueError,TypeError,KeyError,LoraError):pass
+    if not current_selected:return []
+    out=[]
+    for folder in folders:
+        mp=folder/'model_manifest.json'
+        try:
+            if not mp.is_file() or mp.stat().st_size>2*1024*1024:continue
+            data=part.read_json(mp,2*1024*1024)
+            if data.get('schema')!=SHARED_PACK_SCHEMA or data.get('complete') is not True or data.get('runtime_abi')!=SHARED_RUNTIME_ABI:continue
+            target=data.get('target',{})
+            if target.get('qnn_soc_id')!=69 or target.get('dsp_arch')!=79:continue
+            out.append((folder,data))
+        except (OSError,ValueError,TypeError,KeyError,LoraError):continue
+    return out
+
+
+def _pack_file_ok(folder,item):
+    if not isinstance(item,dict):return False
+    rel=item.get('file','');expected=item.get('bytes',0)
+    if not isinstance(rel,str) or not rel or '..' in Path(rel).parts:return False
+    f=part.inside(folder,rel)
+    return f.is_file() and f.stat().st_size>0 and (not expected or f.stat().st_size==expected)
+
+
+def _shared_resolution_entry(data,width,height):
+    for item in data.get('supported_resolutions',data.get('resolutions',[])):
+        if isinstance(item,dict) and item.get('width')==int(width) and item.get('height')==int(height):return item
+    return None
+
+
+def shared_runtime(base,width,height):
+    for folder,data in _shared_pack_candidates(base):
+        entry=_shared_resolution_entry(data,width,height)
+        if not entry:continue
+        contexts=data.get('contexts',{});vae=data.get('vae',{})
+        keys=('encoder_p0','encoder_p1','encoder_p2','decoder_p0','decoder_p1','decoder_p2','decoder_p3')
+        try:
+            if any(not _pack_file_ok(folder,contexts.get(k)) for k in keys) or not _pack_file_ok(folder,vae):continue
+            graph=str(entry.get('graph',''));template=part.inside(folder,str(entry.get('template','')))
+            if not re.fullmatch(r'_[0-9]+x[0-9]+',graph) or not template.is_file():continue
+            paths={k:str(part.inside(folder,contexts[k]['file'])) for k in keys}
+            return {'pack_dir':str(folder),'pack_id':str(data.get('pack_id',data.get('id',folder.name))),'version':str(data.get('model_pack_version',data.get('version',''))),
+                    'template':str(template),'context_root':str(folder.resolve() if str(data.get('contexts_root','contexts')).strip() in ('.','./') else part.inside(folder,str(data.get('contexts_root','contexts')).strip() or 'contexts')),'contexts':paths,
+                    'encoder':paths['encoder_p0'],'decoder':paths['decoder_p0'],'vae':str(part.inside(folder,vae['file'])),'graph':graph,
+                    'lora_abi':str(data.get('lora',{}).get('abi_signature',''))}
+        except (OSError,ValueError,TypeError,KeyError,LoraError):continue
+    return None
+
+
+def shared_resolutions(base):
+    found=set()
+    for _,data in _shared_pack_candidates(base):
+        for item in data.get('supported_resolutions',data.get('resolutions',[])):
+            if not isinstance(item,dict):continue
+            w,h=item.get('width'),item.get('height')
+            if type(w) is int and type(h) is int and shared_runtime(base,w,h):found.add((w,h))
+    return sorted(found,key=lambda r:(r[0]*r[1],r[0]))
 
 
 def model_id_for(width,height):
@@ -73,6 +146,7 @@ def set_active(base,enabled,reason='',persistent_parts=(),width=1024,height=1024
 
 def component_ready(base,width=1024,height=1024):
     try:
+        if shared_runtime(base,width,height):return True
         template=_component(base,width,height);mp=template/'lora_template.json'
         if not mp.is_file():return False
         manifest=part.read_json(mp);_validate_manifest(manifest,width,height)
@@ -101,7 +175,11 @@ def _ensure_alpha5_activation(base,width,height,log):
 
 
 def _prepare_unified(clean,negative,base,width,height,selections,persistent_parts,log):
-    base=Path(base).resolve();template=_component(base,width,height);mp=template/'lora_template.json'
+    base=Path(base).resolve();shared=shared_runtime(base,width,height)
+    if shared:
+        mp=Path(shared['template']).resolve();template=mp.parent;context_root=Path(shared['context_root']).resolve()
+    else:
+        template=_component(base,width,height);mp=template/'lora_template.json';context_root=template
     if not mp.is_file():raise LoraError(f'统一 WAI 模型未安装完整：{width}x{height}')
     manifest=part.read_json(mp);modules,aliases=_validate_manifest(manifest,width,height)
     available_parts={spec['id'] for stage in ('encoder','decoder') for spec in manifest['graphs'][stage]['parts']}
@@ -111,8 +189,8 @@ def _prepare_unified(clean,negative,base,width,height,selections,persistent_part
         raise LoraError('Unsupported persistent graph part: '+(', '.join(unknown) if unknown else 'duplicate id'))
     mapped,evidence=part.map_adapters(selections,part.inside(base,'Lora'),modules,aliases) if selections else ({},[])
     stages=['encoder','decoder']
-    cache=part.inside(base,f'.rin_lora/unified/{width}x{height}');cache.mkdir(parents=True,exist_ok=True)
-    contexts=part.verify_contexts(template,manifest,cache,stages)
+    abi=shared['lora_abi'] if shared else '';cache_key=('shared_'+abi) if abi else f'{width}x{height}';cache=part.inside(base,f'.rin_lora/unified/{cache_key}');cache.mkdir(parents=True,exist_ok=True)
+    contexts=part.verify_contexts(template,manifest,cache,stages,context_root=context_root)
     recipe={'format':'rin-wai-unified-alpha5-v1','resolution':[width,height],'manifest':digest(mp),'adapters':evidence}
     key=hashlib.sha256(json.dumps(recipe,sort_keys=True).encode()).hexdigest();pointer=cache/(key+'.json');dest=None;banks=None
     expected={p['id']:{x[k]:math.prod(x[k+'_shape'])*4 for x in p['layers'] for k in ('a','b')} for s in stages for p in manifest['graphs'][s]['parts']}
@@ -160,7 +238,7 @@ def _prepare_unified(clean,negative,base,width,height,selections,persistent_part
     for entries in mapped.values():
         for source,_,_ in entries:source.check_unchanged()
     paths={pid:{name:str(part.inside(dest,item['file'])) for name,item in items.items()} for pid,items in banks.items()}
-    metadata={'active':bool(evidence),'unified_model':True,'zero_delta':not bool(evidence),'format':'rin-wai-unified-alpha5-v1','model_id':model_id_for(width,height),'resolution':[width,height],'files':evidence,'mapped_modules':len(mapped),'rank_capacity':64,'partition_count':sum(len(manifest['graphs'][s]['parts']) for s in stages),'cache_dir':str(dest),'base_contexts_used_for':[],'persistent_parts':sorted(requested)}
+    metadata={'active':bool(evidence),'unified_model':True,'zero_delta':not bool(evidence),'format':'rin-wai-unified-alpha5-v1','model_id':model_id_for(width,height),'resolution':[width,height],'shared_model_pack':bool(shared),'graph_name':shared['graph'] if shared else '','model_pack_id':shared['pack_id'] if shared else '','model_pack_version':shared['version'] if shared else '','lora_abi':abi,'files':evidence,'mapped_modules':len(mapped),'rank_capacity':64,'partition_count':sum(len(manifest['graphs'][s]['parts']) for s in stages),'cache_dir':str(dest),'base_contexts_used_for':[],'persistent_parts':sorted(requested)}
     return part.PartitionPlan(clean,negative,{s:contexts[manifest['graphs'][s]['parts'][0]['id']] for s in stages},{},metadata,manifest,contexts,paths,requested)
 
 
@@ -168,6 +246,16 @@ def prepare(prompt,negative,base,width,height,log=print):
     clean,selections=legacy.parse_tags(prompt);neg,negative_tags=legacy.parse_tags(negative)
     if negative_tags:raise LoraError('Place LoRA controls in the positive prompt, not the negative prompt')
     enabled=[s for s in selections if s.weight!=0]
+    shared=shared_runtime(base,width,height)
+    if shared:
+        try:
+            plan=_prepare_unified(clean,neg,base,width,height,enabled,(),log)
+            log(f"[Unified WAI] alpha.6 shared pack {shared['pack_id']} {shared['version']} graph={shared['graph']}")
+            return plan
+        except Exception as e:
+            if enabled:raise
+            log('[Unified WAI] alpha.6 shared validation failed; rollback to legacy UNet: '+str(e))
+            return Plan(clean,neg,{}, {},{'active':False,'unified_model':False,'shared_model_pack':True,'rollback':True,'rollback_reason':str(e)[:500],'resolution':[width,height]})
     try:
         config=_ensure_alpha5_activation(base,width,height,log)
         if not config['active']:

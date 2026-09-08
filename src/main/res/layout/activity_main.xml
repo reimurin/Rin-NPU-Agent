@@ -670,6 +670,45 @@
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
+                <TextView
+                    style="@style/TextAppearance.Rin.Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:paddingStart="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/model_update_drawer_section" />
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Rin.Card.Soft"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+                        <TextView
+                            style="@style/TextAppearance.Rin.Body"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/model_update_title"
+                            android:textStyle="bold" />
+                        <TextView
+                            style="@style/TextAppearance.Rin.Caption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/model_update_drawer_hint" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_model_update"
+                            style="@style/Widget.Rin.Button.Secondary"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/model_update_open" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_clear_history"
                     style="@style/Widget.Rin.Button.Ghost"

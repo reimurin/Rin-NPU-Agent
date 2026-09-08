@@ -246,4 +246,67 @@
     <string name="runtime_download_notification_channel">生图运行环境下载</string>
     <string name="runtime_download_notification_channel_desc">本地生图运行环境的后台下载与安装进度</string>
     <string name="runtime_download_notification_title">Rin 生图运行环境</string>
+
+    <string name="back">返回</string>
+    <string name="model_update_title">模型与更新</string>
+    <string name="model_update_app_version">Rin NPU Agent %1$s</string>
+    <string name="model_update_device_section">设备适配</string>
+    <string name="model_update_device_hint">下载前会先按当前 SoC / QNN 目标匹配预编译模型包。</string>
+    <string name="model_update_package_section">模型包</string>
+    <string name="model_update_source_section">下载源</string>
+    <string name="model_update_source_hint">自动模式：中国大陆优先魔搭镜像，其他地区优先 GitHub；任一源失败都会自动回退另一源。</string>
+    <string name="model_source_auto">自动</string>
+    <string name="model_source_github">GitHub 原始源</string>
+    <string name="model_source_china">中国大陆镜像 · ModelScope</string>
+    <string name="model_update_check_now">再次检查</string>
+    <string name="model_update_install">更新模型包</string>
+    <string name="model_update_cancel">取消当前任务</string>
+    <string name="model_update_idle">尚未执行更新检查。</string>
+    <string name="model_update_local_none">当前模型包：旧版 / 未版本化</string>
+    <string name="model_update_local_version">当前模型包：%1$s</string>
+    <string name="model_update_resolution_none">已安装分辨率：按旧版运行时检测</string>
+    <string name="model_update_resolutions">已安装分辨率：%1$s</string>
+    <string name="model_update_remote_resolutions">更新后可用：%1$s</string>
+    <string name="model_update_size">更新大小：%1$s</string>
+    <string name="model_update_size_unknown">更新大小：远端未提供</string>
+    <string name="model_update_lora_unknown">LoRA ABI：旧版 / 未版本化</string>
+    <string name="model_update_lora_abi">LoRA ABI：%1$s</string>
+    <string name="model_update_lora_rank">动态 LoRA：rank %1$d · ABI %2$s</string>
+    <string name="model_update_remote_checking">远端模型包：正在检查…</string>
+    <string name="model_update_remote_version">远端模型包：%1$s</string>
+    <string name="model_update_remote_none">远端模型包：无匹配项</string>
+    <string name="model_update_remote_unavailable">远端模型包：暂不可用</string>
+    <string name="model_update_checking">正在检查 SoC/NPU 匹配与模型包版本…</string>
+    <string name="model_update_up_to_date">当前模型包已经与最新兼容版本一致。</string>
+    <string name="model_update_not_installed">未安装</string>
+    <string name="model_update_available">发现兼容模型更新：%1$s → %2$s</string>
+    <string name="model_update_app_required">模型包 %1$s 需要更新的 APP 运行时；当前模型仍可继续使用。</string>
+    <string name="model_update_check_failed">更新检查失败：%1$s</string>
+    <string name="model_update_source_used">本次检查使用：%1$s</string>
+    <string name="model_update_downloading">正在下载 NPU 模型更新…</string>
+    <string name="model_update_starting">正在准备模型包 %1$s…</string>
+    <string name="model_update_download_progress">文件 %1$d/%2$d · %3$s
+%4$s / %5$s · %6$s · %7$s</string>
+    <string name="model_update_verifying">正在校验 %1$s…</string>
+    <string name="model_update_switching">正在切换到模型包 %1$s…</string>
+    <string name="model_update_complete">模型包更新完成；分辨率档位将按 manifest 自动刷新。</string>
+    <string name="model_update_install_failed">模型更新失败：%1$s</string>
+    <string name="model_update_cancelled">下载已取消；分段数据会保留以便断点续传。</string>
+    <string name="model_update_drawer_section">模型与更新</string>
+    <string name="model_update_drawer_hint">检查 NPU 模型版本、支持的分辨率和下载源。</string>
+    <string name="model_update_open">检查 / 更新模型</string>
+    <string name="model_update_prompt_title">发现 NPU 模型更新</string>
+    <string name="model_update_prompt_message">发现适配本机的模型包更新：%1$s → %2$s
+更新大小：%3$s
+新增分辨率会直接从下载后的模型 manifest 动态加入。</string>
+    <string name="model_update_later">暂不更新</string>
+    <string name="model_update_now">更新</string>
+    <string name="model_update_app_prompt_title">新模型包需要更新 APP</string>
+    <string name="model_update_app_prompt_message">已发布模型包 %1$s（%2$s），但当前 APP 运行时版本不足。你仍可继续使用当前模型包。</string>
+    <string name="model_update_ignore_version">忽略此版本</string>
+    <string name="model_update_ignored">已忽略模型包 %1$s 的启动提醒；仍可在这里手动更新。</string>
+    <string name="model_update_check_cancelled">已取消本次模型检查；下次启动仍可自动检查。</string>
+    <string name="model_update_remote_cancelled">远端模型包：检查已取消</string>
+    <string name="model_update_last_check_none">最近检查：尚未检查</string>
+    <string name="model_update_last_check">最近检查：%1$s</string>
 </resources>

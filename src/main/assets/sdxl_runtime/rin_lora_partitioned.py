@@ -120,11 +120,12 @@ def map_adapters(selections,folder,modules,aliases):
         evidence.append({'name':selection.name,'weight':selection.weight,'sha256':file_sha,'bytes':path.stat().st_size,'modules':len(seen),'source_pairs':len(pairs),'ignored_text_encoder_modules':len(ignored_text_encoder)})
     return mapped,evidence
 
-def verify_contexts(template,manifest,cache,stages):
+def verify_contexts(template,manifest,cache,stages,context_root=None):
     files={}
+    context_root=Path(context_root).resolve() if context_root is not None else Path(template).resolve()
     for stage in stages:
         for part in manifest['graphs'][stage]['parts']:
-            file=inside(template,part['context_file'])
+            file=inside(context_root,part['context_file'])
             if not file.is_file() or file.stat().st_size!=part['context_bytes']:raise LoraError('Incomplete LoRA component: '+part['id'])
             stamp={'path':str(file),'stamp':_stamp(file),'sha256':part['context_sha256']};marker=cache/('verified_'+part['id']+'.json')
             try:valid=read_json(marker)==stamp
@@ -246,7 +247,7 @@ class PartitionPlan(Plan):
                         entries.append(named_input(binding['name'],path))
                     entries.extend(named_input(name,path) for name,path in self.banks[pid].items());part_rows.append(entries)
                 listing=temp/(pid+'.inputs.txt');write_input_rows(listing,part_rows)
-                elapsed=single(self.part_contexts[pid],str(listing),str(part_out),native=False,native_input=False,profile_tag=str(profile)+'_'+pid,persistent_context=(pid in self.persistent_parts),**kwargs);total_ms+=float(elapsed)
+                elapsed=single(self.part_contexts[pid],str(listing),str(part_out),native=False,native_input=False,profile_tag=str(profile)+'_'+pid,persistent_context=(pid in self.persistent_parts),graph_name=str(self.metadata.get('graph_name','')),**kwargs);total_ms+=float(elapsed)
                 for rid,state in enumerate(states):
                     for binding in part['output_bindings']:
                         path,info=resolve_output(part_out/('Result_'+str(rid)),binding['name'],expected_elements=math.prod(binding['qnn_shape']))

@@ -18,8 +18,8 @@ android {
         applicationId 'com.geniex.demo'
         minSdk 31
         targetSdk 34
-        versionCode 22
-        versionName '1.6.0-alpha.5'
+        versionCode 23
+        versionName '1.6.0-alpha.6'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -109,6 +109,9 @@ dependencies {
 
     // Material Components (provides the app theme)
     implementation 'com.google.android.material:material:1.12.0'
+
+    // Ed25519 verification for signed model manifests (minSdk 31; framework Ed25519 is API 33+).
+    implementation 'com.google.crypto.tink:tink-android:1.23.0'
 
     // Markwon (Markdown rendering)
     implementation 'io.noties.markwon:core:4.6.2'
