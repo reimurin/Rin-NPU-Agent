@@ -243,6 +243,7 @@ class ModelPackUpdateManager(private val context: Context) {
             callback(ModelInstallEvent.Complete(readInstalledPack(finalDir)!!)); return
         }
         val staging = File(root, ".staging_$finalName").apply { mkdirs() }
+        val reusableDir = loadCurrentPack()?.takeIf { it.id == release.id }?.directory
         val total = manifest.files.sumOf { it.bytes }
         require(StatFs(root.absolutePath).availableBytes > total + RESERVE_BYTES) { "Not enough free storage for the model update" }
         var completed = manifest.files.sumOf { s -> File(staging, s.path).takeIf { it.isFile && it.length() == s.bytes }?.length() ?: 0L }
@@ -250,6 +251,17 @@ class ModelPackUpdateManager(private val context: Context) {
             checkCancelled()
             val target = inside(staging, spec.path); target.parentFile?.mkdirs()
             if (target.isFile && target.length() == spec.bytes && sha256(target).equals(spec.sha256, true)) return@forEachIndexed
+            if (reusableDir != null && !target.exists()) {
+                val source = runCatching { inside(reusableDir, spec.path) }.getOrNull()
+                if (source != null && source.isFile && source.length() == spec.bytes) {
+                    callback(ModelInstallEvent.Verifying("本机复用 · ${spec.path}"))
+                    if (VerifiedFileReuse.copy(source, target, spec.bytes, spec.sha256) { cancelled.get() || Thread.currentThread().isInterrupted }) {
+                        completed += spec.bytes
+                        callback(ModelInstallEvent.Downloading(index + 1, manifest.files.size, "本机复用 · ${spec.path}", completed, total, 0L, ModelSourcePreference.AUTO))
+                        return@forEachIndexed
+                    }
+                }
+            }
             val part = File(target.parentFile, target.name + ".part")
             var got: File? = null; var last: Throwable? = null; var used = ModelSourcePreference.GITHUB
             for ((source, base) in sourceBases(release)) {
@@ -423,7 +435,7 @@ class ModelPackUpdateManager(private val context: Context) {
         const val INDEX_MODELSCOPE_SIG_URL = "https://modelscope.cn/models/reimurin/Rin-NPU-Agent/resolve/master/models/model-pack-index.json.sig"
         private const val INDEX_SIGNING_PUBLIC_RAW_B64 = "zE7NARTmhoS2rvE59NYCn1ZbmF4KTv5R/ciIzADc7nk="
         private const val CLOUDFLARE_TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
-        const val MANIFEST_SCHEMA = 1
+        const val MANIFEST_SCHEMA = 2
         const val MAX_LORA_RANK = 64
         private const val PREFS = "rin_model_pack_updates"; private const val KEY_SOURCE = "source"; private const val KEY_REGION = "region"; private const val KEY_REGION_AT = "region_at"
         private const val KEY_LAST_CHECK_AT = "last_check_at"; private const val KEY_IGNORED_ID = "ignored_id"; private const val KEY_IGNORED_VERSION = "ignored_version"

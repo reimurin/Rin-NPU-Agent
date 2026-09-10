@@ -48,8 +48,8 @@ def sign_manifest(manifest: Path, private_key: Path, output: Path, key_id: str) 
     parsed = json.loads(raw.decode("utf-8"))
     if not isinstance(parsed, dict):
         raise ValueError("model manifest must be a JSON object")
-    if parsed.get("schema") != 1 or parsed.get("complete") is not True:
-        raise ValueError("model manifest must declare schema=1 and complete=true")
+    if parsed.get("schema") not in (1, 2) or parsed.get("complete") is not True:
+        raise ValueError("model manifest must declare supported schema 1/2 and complete=true")
 
     key = load_private_key(private_key)
     signature = key.sign(raw)

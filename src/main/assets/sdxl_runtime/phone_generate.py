@@ -306,7 +306,7 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
 
     shared = shared_runtime(DR, width, height)
     if shared:
-        ctx.update({"encoder": shared["encoder"], "decoder": shared["decoder"], "vae": shared["vae"], "vae_graph": shared["graph"]})
+        ctx.update({"encoder": shared["encoder"], "decoder": shared["decoder"], "vae": shared["vae"], "vae_graph": shared.get("vae_graph", shared["graph"])})
         return ctx
 
     slot = SDXL_QNN_LORA_SLOT

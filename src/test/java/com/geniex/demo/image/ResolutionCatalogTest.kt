@@ -55,6 +55,22 @@ class ResolutionCatalogTest {
         return folder
     }
 
+    private fun sharedPackV2(base:File,name:String,resolutions:List<ImageResolution>,missingVae:ImageResolution?=null):File {
+        val folder=File(base,"context/model_packs/$name").apply{mkdirs()}
+        val contextDir=File(folder,"contexts").apply{mkdirs()}
+        val contexts=JSONObject()
+        for(id in listOf("encoder_p0","encoder_p1","encoder_p2","decoder_p0","decoder_p1","decoder_p2","decoder_p3")) { File(contextDir,"$id.bin").writeBytes(byteArrayOf(1)); contexts.put(id,JSONObject().put("file","contexts/$id.bin").put("bytes",1)) }
+        val array=JSONArray()
+        for(r in resolutions) {
+            val template=File(folder,"templates/${r.key}.json");template.parentFile.mkdirs();template.writeText("{}")
+            val vaePath="vae/vae_${r.key}.bin"
+            if(r!=missingVae) File(folder,vaePath).apply{parentFile?.mkdirs();writeBytes(byteArrayOf(1))}
+            array.put(JSONObject().put("width",r.width).put("height",r.height).put("graph","_${r.key}").put("template","templates/${r.key}.json").put("vae",JSONObject().put("file",vaePath).put("bytes",1).put("sha256","0".repeat(64))).put("vae_graph",""))
+        }
+        val manifest=JSONObject().put("schema",2).put("complete",true).put("runtime_abi",1).put("id",name).put("version","1.0.1").put("target",JSONObject().put("qnn_soc_id",69).put("dsp_arch",79)).put("lora",JSONObject().put("external_dynamic_ab",true).put("rank_capacity",64).put("abi_signature","e362")).put("contexts",contexts).put("supported_resolutions",array)
+        File(folder,"model_manifest.json").writeText(manifest.toString());return folder
+    }
+
     @Test fun legacyIsOnly1024(){val r=temp.newFolder();complete(File(r,"context"));assertEquals(listOf(ImageResolution(1024,1024)),ResolutionCatalog.discover(r))}
     @Test fun scopedDimensionsDiscovered(){val r=temp.newFolder();complete(File(r,"context/832x1216"));assertEquals(listOf(ImageResolution(832,1216)),ResolutionCatalog.discover(r))}
     @Test fun incompleteBucketNotSupported(){val r=temp.newFolder();val d=File(r,"context/832x1216");complete(d);File(d,ResolutionCatalog.contextNames.first()).writeBytes(byteArrayOf());assertTrue(ResolutionCatalog.discover(r).isEmpty())}
@@ -96,5 +112,7 @@ class ResolutionCatalogTest {
         File(active,"contexts/encoder_p0.bin").writeBytes(byteArrayOf())
         assertTrue(ResolutionCatalog.discover(r).isEmpty())
     }
+    @Test fun schema2UsesPerResolutionVae(){val r=temp.newFolder();val all=listOf(ImageResolution(1024,1024),ImageResolution(832,1216),ImageResolution(1216,832));sharedPackV2(r,"v101",all);File(r,"context/model_packs/current.json").writeText(JSONObject().put("directory","v101").toString());assertEquals(all.toSet(),ResolutionCatalog.discover(r).toSet())}
+    @Test fun schema2MissingOneVaeOnlyRemovesThatResolution(){val r=temp.newFolder();val a=ImageResolution(1024,1024);val b=ImageResolution(832,1216);val c=ImageResolution(1216,832);sharedPackV2(r,"v101-partial",listOf(a,b,c),missingVae=b);File(r,"context/model_packs/current.json").writeText(JSONObject().put("directory","v101-partial").toString());assertEquals(setOf(a,c),ResolutionCatalog.discover(r).toSet())}
 
 }

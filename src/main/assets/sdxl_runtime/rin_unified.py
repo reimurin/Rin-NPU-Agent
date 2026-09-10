@@ -16,7 +16,7 @@ ACTIVATION_FILE='activation.json'
 LEGACY_MEMORY_ROLLBACK_PREFIX='alpha4_persistent_memory_rollback'
 
 SHARED_PACK_ROOT='context/model_packs'
-SHARED_PACK_SCHEMA=1
+SHARED_PACK_SCHEMAS=(1,2)
 SHARED_RUNTIME_ABI=1
 
 
@@ -38,7 +38,7 @@ def _shared_pack_candidates(base):
         try:
             if not mp.is_file() or mp.stat().st_size>2*1024*1024:continue
             data=part.read_json(mp,2*1024*1024)
-            if data.get('schema')!=SHARED_PACK_SCHEMA or data.get('complete') is not True or data.get('runtime_abi')!=SHARED_RUNTIME_ABI:continue
+            if data.get('schema') not in SHARED_PACK_SCHEMAS or data.get('complete') is not True or data.get('runtime_abi')!=SHARED_RUNTIME_ABI:continue
             target=data.get('target',{})
             if target.get('qnn_soc_id')!=69 or target.get('dsp_arch')!=79:continue
             out.append((folder,data))
@@ -64,16 +64,19 @@ def shared_runtime(base,width,height):
     for folder,data in _shared_pack_candidates(base):
         entry=_shared_resolution_entry(data,width,height)
         if not entry:continue
-        contexts=data.get('contexts',{});vae=data.get('vae',{})
+        contexts=data.get('contexts',{});schema=data.get('schema')
+        vae=entry.get('vae',{}) if schema==2 else data.get('vae',{})
         keys=('encoder_p0','encoder_p1','encoder_p2','decoder_p0','decoder_p1','decoder_p2','decoder_p3')
         try:
             if any(not _pack_file_ok(folder,contexts.get(k)) for k in keys) or not _pack_file_ok(folder,vae):continue
             graph=str(entry.get('graph',''));template=part.inside(folder,str(entry.get('template','')))
             if not re.fullmatch(r'_[0-9]+x[0-9]+',graph) or not template.is_file():continue
+            vae_graph=str(entry.get('vae_graph','')) if schema==2 else graph
+            if vae_graph and not re.fullmatch(r'[0-9A-Za-z_.-]+',vae_graph):continue
             paths={k:str(part.inside(folder,contexts[k]['file'])) for k in keys}
             return {'pack_dir':str(folder),'pack_id':str(data.get('pack_id',data.get('id',folder.name))),'version':str(data.get('model_pack_version',data.get('version',''))),
                     'template':str(template),'context_root':str(folder.resolve() if str(data.get('contexts_root','contexts')).strip() in ('.','./') else part.inside(folder,str(data.get('contexts_root','contexts')).strip() or 'contexts')),'contexts':paths,
-                    'encoder':paths['encoder_p0'],'decoder':paths['decoder_p0'],'vae':str(part.inside(folder,vae['file'])),'graph':graph,
+                    'encoder':paths['encoder_p0'],'decoder':paths['decoder_p0'],'vae':str(part.inside(folder,vae['file'])),'graph':graph,'vae_graph':vae_graph,
                     'lora_abi':str(data.get('lora',{}).get('abi_signature',''))}
         except (OSError,ValueError,TypeError,KeyError,LoraError):continue
     return None

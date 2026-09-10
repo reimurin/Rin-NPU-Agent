@@ -91,7 +91,8 @@ internal object ResolutionCatalog {
         val manifest = File(folder, "model_manifest.json")
         if (!manifest.isFile || manifest.length() !in 2..2_097_152) return@runCatching emptyList()
         val root = JSONObject(manifest.readText(Charsets.UTF_8))
-        if (root.optInt("schema") != 1 || !root.optBoolean("complete", false) || root.optInt("runtime_abi") != 1) {
+        val schema = root.optInt("schema")
+        if (schema !in 1..2 || !root.optBoolean("complete", false) || root.optInt("runtime_abi") != 1) {
             return@runCatching emptyList()
         }
         val target = root.optJSONObject("target") ?: return@runCatching emptyList()
@@ -104,7 +105,7 @@ internal object ResolutionCatalog {
 
         val contexts = root.optJSONObject("contexts") ?: return@runCatching emptyList()
         val keys = listOf("encoder_p0", "encoder_p1", "encoder_p2", "decoder_p0", "decoder_p1", "decoder_p2", "decoder_p3")
-        if (keys.any { !sharedFileComplete(folder, contexts.optJSONObject(it)) } || !sharedFileComplete(folder, root.optJSONObject("vae"))) {
+        if (keys.any { !sharedFileComplete(folder, contexts.optJSONObject(it)) }) {
             return@runCatching emptyList()
         }
 
@@ -116,9 +117,12 @@ internal object ResolutionCatalog {
                 val resolution = ImageResolution(item.optInt("width"), item.optInt("height"))
                 val graph = item.optString("graph")
                 val template = safeInside(folder, item.optString("template"))
+                val vae = if (schema >= 2) item.optJSONObject("vae") else root.optJSONObject("vae")
+                val vaeGraph = if (schema >= 2) item.optString("vae_graph") else graph
                 if (resolution.width in 64..8192 && resolution.height in 64..8192 &&
                     resolution.width % 8 == 0 && resolution.height % 8 == 0 &&
-                    graph.matches(Regex("^_[0-9]+x[0-9]+$")) && template?.isFile == true
+                    graph.matches(Regex("^_[0-9]+x[0-9]+$")) && template?.isFile == true &&
+                    sharedFileComplete(folder, vae) && (vaeGraph.isBlank() || vaeGraph.matches(Regex("^[0-9A-Za-z_.-]+$")))
                 ) add(resolution)
             }
         }
