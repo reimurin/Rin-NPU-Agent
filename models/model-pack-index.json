@@ -61,6 +61,100 @@
       "total_download_bytes": 5895285756,
       "notes_zh": "首版 SM8750 三分辨率共享权重模型包：1024×1024、832×1216、1216×832；保留 743 层 rank64 外部动态 LoRA。",
       "notes_en": "First SM8750 weight-shared multi-resolution pack: 1024x1024, 832x1216 and 1216x832 with 743-layer rank64 external dynamic LoRA."
+    },
+    {
+      "status": "published",
+      "id": "wai-v170-sm8750-lora-r64-multires-weightshared",
+      "version": "1.0.1",
+      "runtime_abi": 1,
+      "manifest_schema": 2,
+      "min_app_runtime": 1,
+      "min_app_version_code": 24,
+      "target": {
+        "soc_models": [
+          "SM8750"
+        ],
+        "qnn_soc_id": 69,
+        "dsp_arch": 79,
+        "qairt_build": "v2.48.0.260626120635"
+      },
+      "lora": {
+        "external_dynamic_ab": true,
+        "layers": 743,
+        "rank_capacity": 64,
+        "abi_signature": "e362a2fcf8b5c5af928c2db7fd594232720501345c08ef1b5dfce4acb19e7d18"
+      },
+      "resolutions": [
+        {
+          "width": 1024,
+          "height": 1024,
+          "graph": "_1024x1024",
+          "template": "template_1024x1024.json",
+          "vae": {
+            "file": "vae_1024x1024.bin",
+            "bytes": 235704832,
+            "sha256": "e028202c0b042a0529e28e7b69ea20f580b3153d3044b26cd0c32aa2931c1a6f"
+          }
+        },
+        {
+          "width": 832,
+          "height": 1216,
+          "graph": "_832x1216",
+          "template": "template_832x1216.json",
+          "vae": {
+            "file": "vae_832x1216.bin",
+            "bytes": 245812688,
+            "sha256": "03441ede9cc66ad8ddaa11b0e9c16287945bdfa190d4708856ccc23ea791202e"
+          }
+        },
+        {
+          "width": 1216,
+          "height": 832,
+          "graph": "_1216x832",
+          "template": "template_1216x832.json",
+          "vae": {
+            "file": "vae_1216x832.bin",
+            "bytes": 250236368,
+            "sha256": "bc9bd899e918272a9bfa5b4f1b2ad395ec0eec16b581dc635d58e711d4b86887"
+          }
+        }
+      ],
+      "sources": {
+        "github_base": "https://github.com/reimurin/Rin-NPU-Agent/releases/download/wai-sm8750-multires-r64-v1.0.0",
+        "modelscope_base": "https://modelscope.cn/models/reimurin/Rin-NPU-Agent/resolve/master/releases/wai-sm8750-multires-r64-v1.0.0"
+      },
+      "manifest": {
+        "path": "model_manifest_v1.0.1.json",
+        "sha256": "1ba896b45fbee3529bbc34cffe9845af9ff834062c92ddf1b195f055b8aa98f1",
+        "bytes": 5410,
+        "schema": 2,
+        "signature": {
+          "algorithm": "Ed25519",
+          "path": "model_manifest_v1.0.1.sig.json"
+        }
+      },
+      "total_model_bytes": 6301883808,
+      "total_download_bytes": 6307387804,
+      "upgrade": {
+        "reuse_compatible_from": [
+          "1.0.0"
+        ],
+        "reusable_files": [
+          "encoder_p0.bin",
+          "encoder_p1.bin",
+          "encoder_p2.bin",
+          "decoder_p0.bin",
+          "decoder_p1.bin",
+          "decoder_p2.bin",
+          "decoder_p3.bin",
+          "template_1024x1024.json",
+          "template_832x1216.json",
+          "template_1216x832.json"
+        ],
+        "expected_incremental_download_bytes": 731753888
+      },
+      "notes_zh": "修复 shared VAE 在 SM8750 HTP 单 PD 内存超限：保留共享 7 段 UNet，改为 1024×1024、832×1216、1216×832 独立 VAE。由 1.0.0 升级时 10 个未变化文件本机 SHA 校验后复用，实际新增下载约 698 MiB。",
+      "notes_en": "Fixes shared-VAE HTP PD memory exhaustion on SM8750 by keeping the shared seven-part UNet and using per-resolution VAE contexts. Upgrades from 1.0.0 reuse ten unchanged files after local SHA verification; incremental network download is about 698 MiB."
     }
   ]
 }
