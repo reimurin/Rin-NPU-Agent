@@ -18,8 +18,8 @@ android {
         applicationId 'com.geniex.demo'
         minSdk 31
         targetSdk 34
-        versionCode 24
-        versionName '1.6.0-alpha.7'
+        versionCode 25
+        versionName '1.6.0-alpha.8'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 

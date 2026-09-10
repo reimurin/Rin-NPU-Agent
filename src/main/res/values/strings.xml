@@ -309,4 +309,10 @@ New resolution choices are read dynamically from the downloaded model manifest.<
     <string name="model_update_remote_cancelled">Remote model pack: check cancelled</string>
     <string name="model_update_last_check_none">Last check: not checked yet</string>
     <string name="model_update_last_check">Last check: %1$s</string>
+    <string name="image_generation_notification_channel">本地 AI 生图</string>
+    <string name="image_generation_notification_channel_desc">在后台持续执行本地 NPU 图像生成</string>
+    <string name="image_generation_notification_title">正在生成图片</string>
+    <string name="image_generation_notification_progress">进度 %1$d%% · %2$s</string>
+    <string name="image_generation_notification_stop">停止</string>
+    <string name="image_generation_stopped">生图已停止，可修改提示词后重新生成</string>
 </resources>

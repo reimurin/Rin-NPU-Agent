@@ -3226,6 +3226,13 @@ def _preview_step(latents: np.ndarray, step_idx: int, total_steps: int) -> None:
 
     sess = _get_ort_session()
     if sess is None:
+        t0 = time.time()
+        try:
+            _preview_step_latent_rgb(latents)
+            ms = (time.time() - t0) * 1000
+            _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] LATENT_RGB {ms:.0f}ms")
+        except Exception as e:
+            _log(f"  [PREVIEW fallback] latent RGB failed: {e}")
         return
 
     t0 = time.time()
@@ -3237,13 +3244,47 @@ def _preview_step(latents: np.ndarray, step_idx: int, total_steps: int) -> None:
         _ort_session = None
         _emit_taesd_warning_once(
             "preview_runtime_failed",
-            "TAESD live preview failed during generation; generation will continue without live preview",
+            "TAESD live preview failed; using fast latent preview while generation continues",
         )
-        _log(f"  [TAESD] preview error: {e}")
+        _log(f"  [TAESD] preview error; using latent RGB fallback: {e}")
+        try:
+            _preview_step_latent_rgb(latents)
+            ms = (time.time() - t0) * 1000
+            _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] LATENT_RGB {ms:.0f}ms")
+        except Exception as fallback_error:
+            _log(f"  [PREVIEW fallback] latent RGB failed: {fallback_error}")
         return
 
     ms = (time.time() - t0) * 1000
     _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] CPU {ms:.0f}ms")
+
+
+def _preview_step_latent_rgb(latents: np.ndarray) -> None:
+    """Guaranteed low-cost preview when TAESD backends are unavailable."""
+    arr = np.asarray(latents, dtype=np.float32)
+    if arr.ndim == 4:
+        if arr.shape[0] != 1:
+            raise ValueError(f"latent preview expects batch=1, got {arr.shape}")
+        arr = arr[0]
+    if arr.ndim != 3:
+        raise ValueError(f"latent preview expects rank-3/4 tensor, got {arr.shape}")
+    if arr.shape[0] == 4:
+        hwc = arr.transpose(1, 2, 0)
+    elif arr.shape[-1] == 4:
+        hwc = arr
+    else:
+        raise ValueError(f"latent preview expects 4 channels, got {arr.shape}")
+    matrix = np.asarray([
+        [0.3920, 0.4054, 0.4549],
+        [-0.2634, -0.0196, 0.0653],
+        [0.0568, 0.1687, -0.0755],
+        [-0.3112, -0.2359, -0.2076],
+    ], dtype=np.float32)
+    rgb = np.tensordot(hwc, matrix, axes=([2], [0]))
+    lo = np.percentile(rgb, 1.0, axis=(0, 1), keepdims=True)
+    hi = np.percentile(rgb, 99.0, axis=(0, 1), keepdims=True)
+    rgb = np.clip((rgb - lo) / np.maximum(hi - lo, 1e-5), 0.0, 1.0)
+    _save_preview_png(rgb)
 
 
 def _preview_tensor_to_hwc(out_tensor: np.ndarray) -> np.ndarray:

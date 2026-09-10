@@ -65,8 +65,24 @@ sealed class ImageGenerationEvent {
     data class Warning(val message: String) : ImageGenerationEvent()
     data class Complete(val file: File, val totalSeconds: Double?) : ImageGenerationEvent()
     data class Failure(val message: String, val exitCode: Int? = null) : ImageGenerationEvent()
+    data object Cancelled : ImageGenerationEvent()
 
     enum class Stage { PREPARING, CLIP, DENOISING, VAE, SAVING, COMPLETE }
+}
+
+internal data class ImagePreviewStep(val step: Int, val totalSteps: Int)
+
+private val IMAGE_PREVIEW_PROGRESS_REGEX = Regex(
+    "\\[PREVIEW\\s+(?:step\\s+)?(\\d+)/(\\d+)]",
+    RegexOption.IGNORE_CASE,
+)
+
+internal fun parseImagePreviewStep(line: String, fallbackTotal: Int): ImagePreviewStep? {
+    val match = IMAGE_PREVIEW_PROGRESS_REGEX.find(line) ?: return null
+    val step = match.groupValues[1].toIntOrNull() ?: return null
+    val total = match.groupValues[2].toIntOrNull() ?: fallbackTotal
+    if (step <= 0 || total <= 0 || step > total) return null
+    return ImagePreviewStep(step, total)
 }
 
 class ImageGenerationRuntime(private val context: Context) {
@@ -111,10 +127,9 @@ class ImageGenerationRuntime(private val context: Context) {
         val pythonProbe = python?.let { checkPythonDependencies(it) }
         val pyDeps = pythonProbe?.ok == true
         val resolutions = discoverResolutions(baseDir)
-        val previewSupported =
-            File(baseDir, "phone_gen/taesd_decoder.onnx").isFile ||
-                File(baseDir, "context/taesd_decoder.serialized.bin.bin").isFile ||
-                resolutions.any { File(baseDir, "context/${it.key}/taesd_decoder.serialized.bin.bin").isFile }
+        // alpha8 always has a NumPy/Pillow latent-preview fallback. TAESD remains an
+        // optional quality upgrade rather than a prerequisite for live preview.
+        val previewSupported = pyDeps
 
         val detail = when {
             !baseDir.isDirectory -> "Model directory does not exist"
@@ -249,7 +264,6 @@ class ImageGenerationRuntime(private val context: Context) {
 
                 val unetRegex = Regex("\\[UNet\\s+(\\d+)/(\\d+)]")
                 val unetStartRegex = Regex("\\[UNet START\\s+(\\d+)/(\\d+)]")
-                val previewRegex = Regex("\\[PREVIEW\\s+(\\d+)/(\\d+)]")
                 val totalRegex = Regex("^Total:\\s*([0-9.]+)s", RegexOption.IGNORE_CASE)
                 val savedRegex = Regex("^Saved:\\s*(.+)$", RegexOption.IGNORE_CASE)
                 var lastErrorLine: String? = null
@@ -260,6 +274,7 @@ class ImageGenerationRuntime(private val context: Context) {
                         runCatching { generationLog?.appendText(line + "\n") }
                         diagnosticTail += line.take(6_000)
                         if (diagnosticTail.size > 80) diagnosticTail.removeAt(0)
+                        val previewStep = parseImagePreviewStep(line, request.steps)
                         when {
                             line.startsWith("[CLIP", ignoreCase = true) -> {
                                 callback(ImageGenerationEvent.Progress(8, ImageGenerationEvent.Stage.CLIP, rawLine = line))
@@ -278,13 +293,12 @@ class ImageGenerationRuntime(private val context: Context) {
                                 val p = 10 + ((step.toDouble() / total.coerceAtLeast(1)) * 75.0).roundToInt()
                                 callback(ImageGenerationEvent.Progress(p.coerceIn(10, 85), ImageGenerationEvent.Stage.DENOISING, step, total, line))
                             }
-                            previewRegex.containsMatchIn(line) -> {
-                                val m = previewRegex.find(line)!!
+                            previewStep != null -> {
                                 callback(ImageGenerationEvent.Progress(
-                                    percent = 10 + (((m.groupValues[1].toIntOrNull() ?: 0).toDouble() / (m.groupValues[2].toIntOrNull() ?: request.steps).coerceAtLeast(1)) * 75.0).roundToInt(),
+                                    percent = 10 + ((previewStep.step.toDouble() / previewStep.totalSteps) * 75.0).roundToInt(),
                                     stage = ImageGenerationEvent.Stage.DENOISING,
-                                    step = m.groupValues[1].toIntOrNull() ?: 0,
-                                    totalSteps = m.groupValues[2].toIntOrNull() ?: request.steps,
+                                    step = previewStep.step,
+                                    totalSteps = previewStep.totalSteps,
                                     rawLine = line,
                                 ))
                             }

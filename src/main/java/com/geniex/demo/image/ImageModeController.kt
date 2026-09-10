@@ -49,8 +49,9 @@ class ImageModeController(
 
     private val prefs = activity.getSharedPreferences("rin_image_ui", Activity.MODE_PRIVATE)
     private val presetStore = PromptPresetStore(activity)
-    private val runtime = ImageGenerationRuntime(activity)
+    private val runtime = ImageGenerationRuntime(activity.applicationContext)
     private val installer = GitHubImageRuntimeInstaller(activity, runtime)
+    private val generationListener: (ImageGenerationEvent) -> Unit = { event -> handleRuntimeEvent(event) }
     private var currentMode = runCatching {
         AppMode.valueOf(prefs.getString(KEY_MODE, AppMode.CHAT.name) ?: AppMode.CHAT.name)
     }.getOrDefault(AppMode.CHAT)
@@ -68,9 +69,12 @@ class ImageModeController(
         val automationSeed = if (test.autorun) resolveImageGenerationSeed(activity.intent, allowTestOverride = true) else null
         test.prompt?.let { binding.etImagePrompt.setText(it) }
         applyMode(if (test.autorun) AppMode.IMAGE else currentMode, persist = false)
+        ImageGenerationSession.attach(generationListener, replay = true)
+        ImageGenerationSession.currentRequest()?.let { activeGenerationSeed = it.seed }
+        if (ImageGenerationSession.isRunning()) setGenerating(true)
         if (test.autorun) {
             activity.window.decorView.postDelayed({
-                if (!activity.isFinishing && !activity.isDestroyed && !runtime.isRunning()) startGeneration(automationSeed)
+                if (!activity.isFinishing && !activity.isDestroyed && !ImageGenerationSession.isRunning()) startGeneration(automationSeed)
                 activity.intent.removeExtra(EXTRA_TEST_SEED)
                 activity.intent.removeExtra(EXTRA_TEST_PROMPT)
                 activity.intent.removeExtra(EXTRA_TEST_AUTORUN)
@@ -81,12 +85,14 @@ class ImageModeController(
     fun onResume() {
         if (currentMode == AppMode.IMAGE) refreshRuntimeStatus(false)
         if (prefs.getBoolean(KEY_BROWSER_PENDING, false) && !installer.isBusy()) resumeBrowserImport()
+        ImageGenerationSession.replay(generationListener)
+        if (ImageGenerationSession.isRunning()) { activeGenerationSeed = ImageGenerationSession.currentRequest()?.seed ?: activeGenerationSeed; setGenerating(true) }
     }
 
     fun dispose() {
+        ImageGenerationSession.detach(generationListener)
         installer.cancel()
         RuntimeDownloadForegroundService.stop(activity)
-        runtime.stop()
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
@@ -138,7 +144,7 @@ class ImageModeController(
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         binding.spImageResolution.setSelection(installed.indexOfFirst { it.key == preferred }.coerceAtLeast(0))
-        binding.spImageResolution.isEnabled = installed.isNotEmpty() && !runtime.isRunning()
+        binding.spImageResolution.isEnabled = installed.isNotEmpty() && !ImageGenerationSession.isRunning()
         if (installed.isNotEmpty() && installed.none { it.key == preferred } && preferred != "1024x1024") {
             Toast.makeText(activity, "原选择尺寸未安装；已显示可用的原生尺寸，其他尺寸需对应模型包。", Toast.LENGTH_LONG).show()
         }
@@ -181,7 +187,7 @@ class ImageModeController(
         val loraButton = RinControls.button(activity).apply {
             text = "LoRA 管理与 NPU 测试";isAllCaps=false;contentDescription="打开 LoRA 管理与 NPU 测试"
             setOnClickListener {
-                if (runtime.isRunning()) Toast.makeText(activity,"请等待当前生图完成后再打开 LoRA 测试",Toast.LENGTH_LONG).show()
+                if (ImageGenerationSession.isRunning()) Toast.makeText(activity,"请等待当前生图完成后再打开 LoRA 测试",Toast.LENGTH_LONG).show()
                 else if (installer.isBusy()) Toast.makeText(activity,"请先完成或暂停当前模型下载",Toast.LENGTH_LONG).show()
                 else activity.startActivityForResult(Intent(activity,LoraLabActivity::class.java)
                     .putExtra(LoraLabActivity.EXTRA_PROMPT,binding.etImagePrompt.text?.toString().orEmpty()),REQUEST_LORA_EDITOR)
@@ -193,12 +199,7 @@ class ImageModeController(
             setOnClickListener { StartupDiagnostics.share(activity) }
         },LinearLayout.LayoutParams(-1,-2))
         binding.btnImageGenerate.setOnClickListener { startGeneration() }
-        binding.btnImageStop.setOnClickListener {
-            runtime.stop()
-            activeGenerationSeed = -1L
-            setGenerating(false)
-            binding.tvImageGenerationStatus.text = activity.getString(R.string.image_status_idle)
-        }
+        binding.btnImageStop.setOnClickListener { ImageGenerationSession.stop(activity) }
         binding.btnImageSave.setOnClickListener { saveLastImageToGallery() }
     }
 
@@ -439,7 +440,7 @@ class ImageModeController(
             requestAllFilesAccess()
             return
         }
-        if (runtime.isRunning() || LoraSelfTest.busy.get()) {
+        if (ImageGenerationSession.isRunning() || LoraSelfTest.busy.get()) {
             Toast.makeText(activity,"已有生图或 LoRA 自测正在执行，请稍候",Toast.LENGTH_SHORT).show();return
         }
         val resolution = resolutions.getOrNull(binding.spImageResolution.selectedItemPosition)
@@ -468,7 +469,8 @@ class ImageModeController(
                     setGenerating(true)
                     val generationSeed = seedOverride ?: resolveImageGenerationSeed(activity.intent)
                     activeGenerationSeed = generationSeed
-                    val started = runtime.generate(
+                    val started = ImageGenerationSession.start(
+                        activity,
                         ImageGenerationRequest(
                             prompt = prompt,
                             negativePrompt = negative,
@@ -479,7 +481,6 @@ class ImageModeController(
                             livePreview = binding.switchLivePreview.isChecked && status.previewSupported,
                             progressiveCfg = true,
                         ),
-                        callback = ::handleRuntimeEvent,
                     )
                     if (!started) { activeGenerationSeed = -1L; setGenerating(false) }
                 }
@@ -491,6 +492,8 @@ class ImageModeController(
         activity.runOnUiThread {
             when (event) {
                 is ImageGenerationEvent.Progress -> {
+                    if (event.stage != ImageGenerationEvent.Stage.COMPLETE) setGenerating(true)
+                    activeGenerationSeed = ImageGenerationSession.currentRequest()?.seed ?: activeGenerationSeed
                     binding.imageGenerationProgress.setProgressCompat(event.percent.coerceIn(0, 100), true)
                     when (event.stage) {
                         ImageGenerationEvent.Stage.PREPARING -> binding.tvImageGenerationStatus.setText(R.string.runtime_stage_start)
@@ -512,11 +515,7 @@ class ImageModeController(
                 is ImageGenerationEvent.Complete -> {
                     lastGeneratedFile = event.file
                     showImage(event.file)
-                    val completedSeed = activeGenerationSeed
                     activeGenerationSeed = -1L
-                    if (completedSeed >= 0L) Thread({
-                        runCatching { LoraHistoryStore.recordFromDiagnostics(activity, runtime.defaultBaseDir, event.file, completedSeed) }
-                    }, "rin-lora-history").start()
                     binding.imageGenerationProgress.setProgressCompat(100, true)
                     binding.tvImageGenerationStep.text = "8/8"
                     binding.tvImageGenerationStatus.setText(R.string.image_status_idle)
@@ -536,6 +535,13 @@ class ImageModeController(
                     binding.tvImageGenerationTiming.visibility = View.VISIBLE
                     binding.tvImageGenerationTiming.text = activity.getString(R.string.runtime_generate_failed, event.message)
                     Toast.makeText(activity, activity.getString(R.string.runtime_generate_failed, event.message), Toast.LENGTH_LONG).show()
+                }
+                ImageGenerationEvent.Cancelled -> {
+                    activeGenerationSeed = -1L
+                    setGenerating(false)
+                    binding.tvImageGenerationStatus.text = activity.getString(R.string.image_status_idle)
+                    binding.tvImageGenerationTiming.visibility = View.VISIBLE
+                    binding.tvImageGenerationTiming.text = activity.getString(R.string.image_generation_stopped)
                 }
             }
         }
