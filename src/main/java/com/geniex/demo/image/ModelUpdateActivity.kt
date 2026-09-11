@@ -1,15 +1,21 @@
 package com.geniex.demo.image
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import android.text.format.DateFormat
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import com.geniex.demo.BuildConfig
 import com.geniex.demo.R
 import com.geniex.demo.databinding.ActivityModelUpdateBinding
 import com.gyf.immersionbar.ktx.immersionBar
+import java.io.File
 import java.util.Locale
 
 class ModelUpdateActivity : AppCompatActivity() {
@@ -19,6 +25,9 @@ class ModelUpdateActivity : AppCompatActivity() {
     private var sourceSpinnerReady = false
     private var autoInstallAfterCheck = false
     private var installInProgress = false
+    private val imageRuntime by lazy { ImageGenerationRuntime(applicationContext) }
+    private val runtimeInstaller by lazy { GitHubImageRuntimeInstaller(this, imageRuntime) }
+    private var currentPrompt = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,6 +36,7 @@ class ModelUpdateActivity : AppCompatActivity() {
         immersionBar { statusBarColorInt(getColor(R.color.rin_bg)); statusBarDarkFont(true) }
         manager = ModelPackUpdateManager(this)
         autoInstallAfterCheck = intent.getBooleanExtra(EXTRA_AUTO_INSTALL, false)
+        currentPrompt = intent.getStringExtra(EXTRA_PROMPT).orEmpty()
         setupUi()
         renderLocal()
         renderLastCheck()
@@ -71,6 +81,174 @@ class ModelUpdateActivity : AppCompatActivity() {
             RuntimeDownloadForegroundService.stop(this)
             setBusy(false)
             binding.tvUpdateStatus.setText(if (wasInstall) R.string.model_update_cancelled else R.string.model_update_check_cancelled)
+        }
+        binding.btnModelCenterLora.setOnClickListener {
+            if (manager.isBusy() || runtimeInstaller.isBusy() || LoraSelfTest.busy.get()) {
+                Toast.makeText(this, "请等待当前模型任务完成", Toast.LENGTH_SHORT).show()
+            } else {
+                startActivityForResult(
+                    Intent(this, LoraLabActivity::class.java).putExtra(LoraLabActivity.EXTRA_PROMPT, currentPrompt),
+                    REQUEST_LORA_EDITOR,
+                )
+            }
+        }
+        binding.btnModelCenterRuntimeCheck.setOnClickListener { inspectImageRuntime(showToast = true) }
+        binding.btnModelCenterRuntimeRepair.setOnClickListener { startRuntimeRepair() }
+        binding.btnModelCenterRuntimeCancel.setOnClickListener {
+            runtimeInstaller.cancel()
+            RuntimeDownloadForegroundService.stop(this)
+            setRuntimeBusy(false)
+            binding.tvModelCenterAdvancedStatus.text = "基础运行时下载已暂停；已下载分卷会保留用于续传。"
+        }
+        binding.btnModelCenterNpuTest.setOnClickListener {
+            if (manager.isBusy() || runtimeInstaller.isBusy()) {
+                Toast.makeText(this, "请先完成当前模型下载或检查", Toast.LENGTH_SHORT).show()
+            } else if (!LoraSelfTest.busy.compareAndSet(false, false)) {
+                Toast.makeText(this, "NPU 自测正在运行", Toast.LENGTH_SHORT).show()
+            } else {
+                binding.tvModelCenterAdvancedStatus.text = "正在运行动态 LoRA NPU 自测…"
+                LoraSelfTest.start(this) { message -> runOnUiThread {
+                    if (!isFinishing && !isDestroyed) binding.tvModelCenterAdvancedStatus.text = message
+                } }
+            }
+        }
+        binding.btnModelCenterShareNpuReport.setOnClickListener { shareDiagnostic(File(cacheDir, "lora_selftest_latest.json"), "NPU 自测报告") }
+        binding.btnModelCenterShareLoraReport.setOnClickListener {
+            shareDiagnostic(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "sdxl_qnn/.rin_diagnostics/lora_generation_latest.json"), "LoRA 生图诊断")
+        }
+        binding.btnModelCenterShareDiagnostics.setOnClickListener { StartupDiagnostics.share(this) }
+        renderLoraSummary()
+        inspectImageRuntime(showToast = false)
+    }
+
+    private fun renderLoraSummary() {
+        val selections = runCatching { LoraTags.parse(currentPrompt).selections }.getOrDefault(emptyList())
+        binding.tvModelCenterLoraStatus.text = if (selections.isEmpty()) {
+            "当前提示词未启用 LoRA。"
+        } else {
+            "当前：" + selections.joinToString(" · ") { "${it.name} ${it.weight}" }
+        }
+    }
+
+    private fun inspectImageRuntime(showToast: Boolean) {
+        binding.tvModelCenterAdvancedStatus.text = "正在检查基础运行时完整性…"
+        Thread({
+            val result = runCatching { imageRuntime.inspect() }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                result.onSuccess { status ->
+                    val detail = when {
+                        status.ready -> "基础运行时完整 · 原生尺寸：" + status.availableResolutions.joinToString { it.key } + if (status.previewSupported) " · 实时预览可用" else " · 实时预览不可用"
+                        !status.storagePermission -> "需要文件访问权限后才能检查基础运行时。"
+                        status.pythonPath == null || !status.pythonDependenciesOk -> status.detail ?: "Python / NumPy / Pillow 运行时不完整。"
+                        else -> "基础运行时不完整：" + status.missingCommonFiles.take(4).joinToString(", ")
+                    }
+                    binding.tvModelCenterAdvancedStatus.text = detail
+                    if (showToast) Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
+                }.onFailure { error ->
+                    StartupDiagnostics.record(this, "ModelUpdateActivity.inspectImageRuntime", error)
+                    val detail = "运行时检查失败：${error.message ?: error.javaClass.simpleName}"
+                    binding.tvModelCenterAdvancedStatus.text = detail
+                    if (showToast) Toast.makeText(this, detail, Toast.LENGTH_LONG).show()
+                }
+            }
+        }, "rin-model-center-runtime-check").start()
+    }
+
+    private fun requestStorageAccessForRuntime() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+        }.onFailure { startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
+    }
+
+    private fun startRuntimeRepair() {
+        if (runtimeInstaller.isBusy()) return
+        if (!imageRuntime.hasStorageAccess()) {
+            requestStorageAccessForRuntime()
+            binding.tvModelCenterAdvancedStatus.text = "授予文件访问权限后再次点击修复 / 安装。"
+            return
+        }
+        setRuntimeBusy(true)
+        RuntimeDownloadForegroundService.start(this, "正在修复基础运行时")
+        val started = runtimeInstaller.install(::handleRuntimeInstallEvent)
+        if (!started) {
+            RuntimeDownloadForegroundService.stop(this)
+            setRuntimeBusy(false)
+            Toast.makeText(this, "已有基础运行时任务正在执行", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleRuntimeInstallEvent(event: ImageInstallEvent) {
+        runOnUiThread {
+            when (event) {
+                ImageInstallEvent.Checking -> {
+                    binding.progressModelCenterRuntime.visibility = View.VISIBLE
+                    binding.progressModelCenterRuntime.isIndeterminate = true
+                    binding.tvModelCenterAdvancedStatus.text = "正在检查基础运行时…"
+                }
+                is ImageInstallEvent.Unavailable -> {
+                    setRuntimeBusy(false); RuntimeDownloadForegroundService.stop(this)
+                    binding.tvModelCenterAdvancedStatus.text = event.message
+                }
+                is ImageInstallEvent.Downloading -> {
+                    binding.progressModelCenterRuntime.visibility = View.VISIBLE
+                    binding.progressModelCenterRuntime.isIndeterminate = false
+                    binding.progressModelCenterRuntime.setProgressCompat(event.percent.coerceIn(0, 100), true)
+                    binding.tvModelCenterAdvancedStatus.text = "下载 ${event.partIndex}/${event.partCount} · ${event.percent}% · ${formatSpeed(event.bytesPerSecond)}"
+                    RuntimeDownloadForegroundService.update(this, event.percent, binding.tvModelCenterAdvancedStatus.text.toString())
+                }
+                is ImageInstallEvent.BrowserWaiting -> binding.tvModelCenterAdvancedStatus.text = "等待浏览器下载的运行时文件…"
+                ImageInstallEvent.Verifying -> binding.tvModelCenterAdvancedStatus.text = "正在校验基础运行时…"
+                ImageInstallEvent.Extracting -> binding.tvModelCenterAdvancedStatus.text = "正在安装基础运行时…"
+                is ImageInstallEvent.Complete -> {
+                    setRuntimeBusy(false); RuntimeDownloadForegroundService.stop(this)
+                    binding.progressModelCenterRuntime.visibility = View.GONE
+                    binding.tvModelCenterAdvancedStatus.text = "基础运行时已修复 / 安装完成：${event.version}"
+                    inspectImageRuntime(showToast = false)
+                }
+                is ImageInstallEvent.Failure -> {
+                    setRuntimeBusy(false); RuntimeDownloadForegroundService.stop(this)
+                    binding.progressModelCenterRuntime.visibility = View.GONE
+                    binding.tvModelCenterAdvancedStatus.text = "基础运行时修复失败：${event.message}"
+                }
+            }
+        }
+    }
+
+    private fun setRuntimeBusy(value: Boolean) {
+        binding.btnModelCenterRuntimeCheck.isEnabled = !value
+        binding.btnModelCenterRuntimeRepair.isEnabled = !value
+        binding.btnModelCenterNpuTest.isEnabled = !value
+        binding.btnModelCenterRuntimeCancel.visibility = if (value) View.VISIBLE else View.GONE
+        if (value) {
+            binding.progressModelCenterRuntime.visibility = View.VISIBLE
+            binding.progressModelCenterRuntime.isIndeterminate = true
+        }
+    }
+
+    private fun shareDiagnostic(file: File, title: String) {
+        if (!file.isFile) {
+            Toast.makeText(this, "暂无$title", Toast.LENGTH_SHORT).show()
+            return
+        }
+        runCatching {
+            val exported = File(cacheDir, "model_center_reports/${file.name}").apply { parentFile?.mkdirs() }
+            file.copyTo(exported, overwrite = true)
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", exported)
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, "分享$title"))
+        }.onFailure { Toast.makeText(this, it.message ?: "分享失败", Toast.LENGTH_LONG).show() }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_LORA_EDITOR && resultCode == RESULT_OK) {
+            data?.getStringExtra(LoraLabActivity.EXTRA_PROMPT)?.let { currentPrompt = it }
+            renderLoraSummary()
+            setResult(RESULT_OK, Intent().putExtra(LoraLabActivity.EXTRA_PROMPT, currentPrompt))
         }
     }
 
@@ -284,11 +462,14 @@ class ModelUpdateActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (isFinishing && manager.isBusy()) manager.cancel()
+        if (isFinishing && runtimeInstaller.isBusy()) runtimeInstaller.cancel()
         super.onDestroy()
     }
 
     companion object {
         const val EXTRA_AUTO_INSTALL = "rin_model_update_auto_install"
+        const val EXTRA_PROMPT = LoraLabActivity.EXTRA_PROMPT
+        private const val REQUEST_LORA_EDITOR = 16605
         const val EXTRA_SKIP_AUTO_CHECK = "rin_model_update_skip_auto_check"
     }
 }

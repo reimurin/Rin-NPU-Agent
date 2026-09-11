@@ -6,8 +6,6 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
@@ -38,26 +36,8 @@ class LoraLabActivity:AppCompatActivity() {
     private lateinit var catalog:LinearLayout
     private lateinit var prompt:TextInputEditText
     private lateinit var tagResult:TextView
-    private lateinit var componentStatus:TextView
-    private lateinit var status:TextView
-    private lateinit var startButton:MaterialButton
-    private lateinit var installButton:MaterialButton
-    private lateinit var pauseButton:MaterialButton
     private val scanning=AtomicBoolean(false)
-    private val handler=Handler(Looper.getMainLooper())
     private val base:File get()=File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),"sdxl_qnn")
-    private val refreshState=object:Runnable {
-        override fun run() {
-            if(pageReady&&!isFinishing&&!isDestroyed) {
-                status.text=LoraSelfTest.lastMessage
-                componentStatus.text=LoraModelComponent.status
-                startButton.isEnabled=!LoraSelfTest.busy.get()&&!LoraModelComponent.busy.get()
-                installButton.isEnabled=!LoraModelComponent.busy.get()&&!LoraSelfTest.busy.get()
-                pauseButton.isEnabled=LoraModelComponent.busy.get()
-                handler.postDelayed(this,700)
-            }
-        }
-    }
     private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
     private fun label(text:String,size:Float=15f,parent:LinearLayout=content):TextView {
         val view=TextView(this).apply {
@@ -87,21 +67,6 @@ class LoraLabActivity:AppCompatActivity() {
             else runCatching{startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:$packageName")))}
                 .onFailure{startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))}
         }
-        label("统一 WAI 模型（普通生图 + LoRA）",21f)
-        label("alpha.5 将普通生图与 LoRA 固化为同一套七段 UNet；1024 × 1024 保持兼容，并开始支持按分辨率安装独立 QNN context。旧两段 UNet 在 alpha.5 实机验收前仍保留作回滚点。",14f)
-        componentStatus=label(LoraModelComponent.status)
-        installButton=button("安装 / 继续升级统一模型") {
-            if(!StorageAccess.granted()){LoraModelComponent.status="请先授予文件访问权限";return@button}
-            if(LoraSelfTest.busy.get()){LoraModelComponent.status="请等待 NPU 自测结束";return@button}
-            RinControls.dialog(this).setTitle("升级统一 WAI 模型")
-                .setMessage("下载并校验统一七段 UNet 到 staging；不会提前删除旧模型。alpha.5 实机验收通过后再释放旧 UNet。")
-                .setNegativeButton("取消",null).setPositiveButton("开始 / 继续") {_,_->
-                    LoraModelComponent.install(this,base) { message->runOnUiThread {
-                        if(pageReady&&!isFinishing&&!isDestroyed)componentStatus.text=message
-                    }}
-                }.show()
-        }
-        pauseButton=button("暂停组件下载"){LoraModelComponent.cancel()}
         label("提示词与直接权重",21f)
         val initial=saved?.getString(EXTRA_PROMPT) ?: intent.getStringExtra(EXTRA_PROMPT) ?: getPreferences(MODE_PRIVATE).getString("tags","").orEmpty()
         val (field,edit)=RinControls.input(this,"例如 <lora:角色名称:0.8>",initial,"lora_prompt_editor",3,8)
@@ -125,25 +90,9 @@ class LoraLabActivity:AppCompatActivity() {
         label("将 .safetensors 放入此目录。卡片会检测当前提示词：未插入显示“插入”，已插入显示“弹出 · 当前权重”。如果这个 LoRA 成功生成过图片，还会显示最近一次效果图、权重、时间和 Seed。弹出只移除标签，不删除 LoRA 文件。",14f)
         button("刷新 LoRA 列表"){refreshCatalog()}
         catalog=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};content.addView(catalog,LinearLayout.LayoutParams(-1,-2))
-        val advanced=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;visibility=View.GONE}
-        button("展开 / 收起高级自测") {advanced.visibility=if(advanced.visibility==View.VISIBLE)View.GONE else View.VISIBLE}
-        content.addView(advanced,LinearLayout.LayoutParams(-1,-2))
-        label("NPU 适配器自测",21f,advanced)
-        label("以下使用内置小模型，只用于诊断接口；已经通过时无需反复运行，不能代替真实 WAI 成图验收。",14f,advanced)
-        status=label(LoraSelfTest.lastMessage,parent=advanced)
-        startButton=button("开始动态 LoRA NPU 自测",advanced) {
-            if(LoraModelComponent.busy.get()){Toast.makeText(this,"请先完成或暂停组件下载",Toast.LENGTH_SHORT).show();return@button}
-            LoraSelfTest.start(this){message->runOnUiThread{if(pageReady&&!isFinishing&&!isDestroyed)status.text=message}}
-        }
-        button("对照测试：预编译适配器",advanced) {
-            if(!LoraModelComponent.busy.get())LoraSelfTest.start(this,dynamic=false){message->runOnUiThread{if(pageReady&&!isFinishing&&!isDestroyed)status.text=message}}
-        }
-        button("分享自测报告",advanced){shareFile(File(cacheDir,"lora_selftest_latest.json"))}
-        button("分享最近 LoRA 生图记录",advanced){shareFile(File(base,".rin_diagnostics/lora_generation_latest.json"))}
-        button("分享启动异常记录",advanced){StartupDiagnostics.share(this)}
     }
-    override fun onResume(){super.onResume();if(pageReady){refreshCatalog();handler.post(refreshState)}}
-    override fun onPause(){handler.removeCallbacks(refreshState);if(::prompt.isInitialized)getPreferences(MODE_PRIVATE).edit().putString("tags",prompt.text?.toString().orEmpty()).apply();super.onPause()}
+    override fun onResume(){super.onResume();if(pageReady)refreshCatalog()}
+    override fun onPause(){if(::prompt.isInitialized)getPreferences(MODE_PRIVATE).edit().putString("tags",prompt.text?.toString().orEmpty()).apply();super.onPause()}
     override fun onSaveInstanceState(outState:Bundle){if(::prompt.isInitialized)outState.putString(EXTRA_PROMPT,prompt.text?.toString().orEmpty());super.onSaveInstanceState(outState)}
     private fun refreshCatalog() {
         if(!StorageAccess.granted()){catalog.removeAllViews();label("等待文件访问权限。",parent=catalog);return}
@@ -151,11 +100,9 @@ class LoraLabActivity:AppCompatActivity() {
         thread(name="rin-lora-catalog") {
             val result=runCatching{LoraCatalog.scan(base,LoraCompatibility.load(applicationContext))}
             val history=runCatching{LoraHistoryStore.index(applicationContext)}.getOrDefault(emptyMap())
-            val installed=LoraModelComponent.installed(base)
             runOnUiThread {
                 scanning.set(false)
                 if(!pageReady||isFinishing||isDestroyed)return@runOnUiThread
-                if(!LoraModelComponent.busy.get())LoraModelComponent.status=if(installed)"统一 WAI 模型已安装；alpha.5 将普通生图与 LoRA 固化为同一七段 UNet。" else "尚未安装统一 WAI 模型。"
                 catalog.removeAllViews()
                 result.onSuccess {entries->
                     if(entries.isEmpty())label("目录已创建，暂未发现 LoRA 文件。",parent=catalog)

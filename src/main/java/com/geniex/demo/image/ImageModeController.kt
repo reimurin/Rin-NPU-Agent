@@ -18,6 +18,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
+import androidx.core.widget.doAfterTextChanged
 import com.geniex.demo.R
 import com.geniex.demo.databinding.ActivityMainBinding
 import java.io.File
@@ -85,6 +86,7 @@ class ImageModeController(
 
     fun onResume() {
         uiActive = true
+        refreshModelCenterSummary()
         renderSessionSnapshot(ImageGenerationSession.snapshot())
         if (currentMode == AppMode.IMAGE) refreshRuntimeStatus(false)
         if (prefs.getBoolean(KEY_BROWSER_PENDING, false) && !installer.isBusy()) resumeBrowserImport()
@@ -100,7 +102,7 @@ class ImageModeController(
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
-        if (requestCode == REQUEST_LORA_EDITOR) {
+        if (requestCode == REQUEST_LORA_EDITOR || requestCode == REQUEST_MODEL_CENTER) {
             if (resultCode == Activity.RESULT_OK) {
                 data?.getStringExtra(LoraLabActivity.EXTRA_PROMPT)?.let { text ->
                     runCatching { LoraTags.parse(text) }.onSuccess { binding.etImagePrompt.setText(text) }
@@ -174,6 +176,8 @@ class ImageModeController(
         binding.switchLivePreview.setOnCheckedChangeListener { _, value ->
             prefs.edit().putBoolean(KEY_LIVE_PREVIEW, value).apply()
         }
+        binding.etImagePrompt.doAfterTextChanged { refreshModelCenterSummary() }
+        refreshModelCenterSummary()
     }
 
     private fun setupListeners() {
@@ -188,20 +192,19 @@ class ImageModeController(
         binding.btnImageCheckRuntime.setOnClickListener {
             if (runtime.hasStorageAccess()) refreshRuntimeStatus(true) else requestAllFilesAccess()
         }
-        val loraButton = RinControls.button(activity).apply {
-            text = "LoRA 管理与 NPU 测试";isAllCaps=false;contentDescription="打开 LoRA 管理与 NPU 测试"
-            setOnClickListener {
-                if (ImageGenerationSession.isRunning()) Toast.makeText(activity,"请等待当前生图完成后再打开 LoRA 测试",Toast.LENGTH_LONG).show()
-                else if (installer.isBusy()) Toast.makeText(activity,"请先完成或暂停当前模型下载",Toast.LENGTH_LONG).show()
-                else activity.startActivityForResult(Intent(activity,LoraLabActivity::class.java)
-                    .putExtra(LoraLabActivity.EXTRA_PROMPT,binding.etImagePrompt.text?.toString().orEmpty()),REQUEST_LORA_EDITOR)
+        binding.btnImageModelCenter.setOnClickListener {
+            if (ImageGenerationSession.isRunning()) {
+                Toast.makeText(activity, "请等待当前生图完成后再打开模型管理", Toast.LENGTH_LONG).show()
+            } else if (installer.isBusy()) {
+                Toast.makeText(activity, "请先完成或暂停当前模型下载", Toast.LENGTH_LONG).show()
+            } else {
+                activity.startActivityForResult(
+                    Intent(activity, ModelUpdateActivity::class.java)
+                        .putExtra(ModelUpdateActivity.EXTRA_PROMPT, binding.etImagePrompt.text?.toString().orEmpty()),
+                    REQUEST_MODEL_CENTER,
+                )
             }
         }
-        binding.drawerImageSettingsGroup.addView(loraButton, LinearLayout.LayoutParams(-1,-2))
-        binding.drawerImageSettingsGroup.addView(RinControls.button(activity).apply {
-            text="分享启动诊断";isAllCaps=false
-            setOnClickListener { StartupDiagnostics.share(activity) }
-        },LinearLayout.LayoutParams(-1,-2))
         binding.btnImageGenerate.setOnClickListener { startGeneration() }
         binding.btnImageStop.setOnClickListener { ImageGenerationSession.stop(activity) }
         binding.btnImageSave.setOnClickListener { saveLastImageToGallery() }
@@ -231,9 +234,24 @@ class ImageModeController(
         binding.tvTopMode.setText(if (image) R.string.mode_image else R.string.mode_chat)
         binding.btnModeSwitch.setText(if (image) R.string.mode_image else R.string.mode_chat)
         binding.btnModeSwitch.icon = ContextCompat.getDrawable(activity, if (image) R.drawable.ic_image_mode_24 else R.drawable.ic_chat_mode_24)
-        if (image) refreshRuntimeStatus(false)
+        if (image) { refreshRuntimeStatus(false); refreshModelCenterSummary() }
     }
 
+    private fun refreshModelCenterSummary() {
+        val pack = runCatching { ModelPackUpdateManager(activity).currentPack() }.getOrNull()
+        binding.tvImageModelStatusSummary.text = if (pack == null) {
+            "基础模型：未安装 model-pack"
+        } else {
+            val sizes = pack.resolutions.joinToString(" / ") { "${it.width}×${it.height}" }
+            "基础模型：${pack.version}" + if (sizes.isBlank()) "" else " · $sizes"
+        }
+        val selected = runCatching { LoraTags.parse(binding.etImagePrompt.text?.toString().orEmpty()).selections }.getOrDefault(emptyList())
+        binding.tvImageLoraStatusSummary.text = if (selected.isEmpty()) {
+            "LoRA：未启用"
+        } else {
+            "LoRA：" + selected.joinToString(" · ") { "${it.name} ${it.weight}" }
+        }
+    }
     private fun inspectOrReport(): ImageRuntimeStatus? = try {
         runtime.inspect()
     } catch (e:Exception) {
@@ -669,6 +687,7 @@ class ImageModeController(
 
     companion object {
         const val REQUEST_LORA_EDITOR = 16603
+        const val REQUEST_MODEL_CENTER = 16604
         const val EXTRA_TEST_SEED = "rin_test_seed"
         const val EXTRA_TEST_PROMPT = "rin_test_prompt"
         const val EXTRA_TEST_AUTORUN = "rin_test_autorun"
@@ -681,3 +700,4 @@ class ImageModeController(
         const val REQUEST_RUNTIME_DOWNLOAD_DIR = 3302
     }
 }
+

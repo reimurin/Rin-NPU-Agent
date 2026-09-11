@@ -31,7 +31,7 @@
                 style="@style/TextAppearance.Rin.PageTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/model_update_title" />
+                android:text="模型" />
             <TextView
                 android:id="@+id/tv_update_app_version"
                 style="@style/TextAppearance.Rin.Caption"
@@ -63,6 +63,7 @@
             android:paddingEnd="14dp"
             android:paddingBottom="28dp">
 
+            <TextView style="@style/TextAppearance.Rin.PageTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="4dp" android:paddingBottom="8dp" android:text="基础模型" />
             <TextView
                 style="@style/TextAppearance.Rin.Section"
                 android:layout_width="match_parent"
@@ -205,6 +206,30 @@
                 android:lineSpacingExtra="2dp"
                 android:text="@string/model_update_idle"
                 android:textIsSelectable="true" />
+
+            <TextView style="@style/TextAppearance.Rin.PageTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:paddingStart="4dp" android:paddingBottom="8dp" android:text="LoRA" />
+            <com.google.android.material.card.MaterialCardView style="@style/Widget.Rin.Card.Soft" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="14dp">
+                    <TextView android:id="@+id/tv_model_center_lora_status" style="@style/TextAppearance.Rin.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="正在读取 LoRA 状态…" />
+                    <TextView style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="管理本地 .safetensors、提示词标签、权重与最近使用记录。NPU 自测已移到高级。" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_lora" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="10dp" android:text="打开 LoRA 管理" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView style="@style/TextAppearance.Rin.PageTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:paddingStart="4dp" android:paddingBottom="8dp" android:text="高级" />
+            <com.google.android.material.card.MaterialCardView style="@style/Widget.Rin.Card.Soft" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="14dp">
+                    <TextView android:id="@+id/tv_model_center_advanced_status" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="运行时完整性、NPU 自测与诊断工具。" android:textIsSelectable="true" />
+                    <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/progress_model_center_runtime" style="@style/Widget.Rin.Progress" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_runtime_check" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="10dp" android:text="检查运行时完整性" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_runtime_repair" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="7dp" android:text="修复 / 安装基础运行时" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_runtime_cancel" style="@style/Widget.Rin.Button.Ghost" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="5dp" android:text="暂停运行时下载" android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_npu_test" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="10dp" android:text="动态 LoRA NPU 自测" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_share_npu_report" style="@style/Widget.Rin.Button.Ghost" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="5dp" android:text="分享 NPU 自测报告" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_share_lora_report" style="@style/Widget.Rin.Button.Ghost" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="5dp" android:text="分享最近 LoRA 生图诊断" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btn_model_center_share_diagnostics" style="@style/Widget.Rin.Button.Ghost" android:layout_width="match_parent" android:layout_height="42dp" android:layout_marginTop="5dp" android:text="分享启动诊断" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

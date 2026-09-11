@@ -20,7 +20,7 @@ android {
         applicationId 'com.geniex.demo'
         minSdk 31
         targetSdk 34
-        versionCode 26
+        versionCode 27
         versionName '1.6.0-alpha.8'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
@@ -155,3 +155,4 @@ dependencies {
 
 // Generated output stays off the nearly-full source drive.
 layout.buildDirectory.set(file("../../toolchain/temp/integration-1.6-gradle-build"))
+

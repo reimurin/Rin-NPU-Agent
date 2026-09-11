@@ -102,6 +102,16 @@ import java.io.FileOutputStream
 import java.util.Locale
 import kotlin.math.abs
 
+internal class ForegroundImeGuard {
+    private var stopped = false
+    fun onStop() { stopped = true }
+    fun consumeResume(): Boolean {
+        val value = stopped
+        stopped = false
+        return value
+    }
+}
+
 class MainActivity : FragmentActivity() {
     private val binding: ActivityMainBinding by inflate()
     private var downloadJob: Job? = null
@@ -172,6 +182,7 @@ class MainActivity : FragmentActivity() {
     private var crossConversationReadAuthorized = false
     private lateinit var imageModeController: ImageModeController
     private var startupModelUpdateChecked = false
+    private val foregroundImeGuard = ForegroundImeGuard()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -768,8 +779,19 @@ class MainActivity : FragmentActivity() {
     private fun selectedModelLabel(): String =
         modelList.firstOrNull { it.id == selectModelId }?.displayName ?: getString(R.string.model_generic)
 
+    private fun suppressRestoredIme() {
+        (currentFocus as? EditText)?.clearFocus()
+        binding.drawerLayout.isFocusableInTouchMode = true
+        binding.drawerLayout.requestFocus()
+        binding.drawerLayout.post {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(binding.drawerLayout.windowToken, 0)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        if (foregroundImeGuard.consumeResume()) suppressRestoredIme()
         if (::spModelList.isInitialized && ::modelList.isInitialized) refreshCachedModelsIntoSpinner()
         if (::sessionStore.isInitialized) {
             refreshProjectList()
@@ -1951,6 +1973,8 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onStop() {
+        foregroundImeGuard.onStop()
+        suppressRestoredIme()
         persistCurrentConversation()
         super.onStop()
     }
@@ -1994,3 +2018,4 @@ class MainActivity : FragmentActivity() {
         }
     }
 }
+

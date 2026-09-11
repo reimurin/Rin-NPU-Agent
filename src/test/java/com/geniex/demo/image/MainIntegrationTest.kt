@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.view.View
+import android.view.WindowManager
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.EditText
@@ -43,19 +44,37 @@ class MainIntegrationActivity:AppCompatActivity() {
 class MainIntegrationTest {
     private fun views(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap{views(v.getChildAt(it))}else emptyList()
     private fun idle(){shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(150))}
-    @Test fun originalMainLayoutAndLoraEntry() {
+    @Test fun imageDrawerUsesUnifiedModelCenterEntry() {
         val c=Robolectric.buildActivity(MainIntegrationActivity::class.java).setup().visible();val a=c.get()
-        val entry=views(a.binding.drawerImageSettingsGroup).filterIsInstance<TextView>().single{it.text.toString()=="LoRA 管理与 NPU 测试"}
-        entry.performClick();val intent=shadowOf(a).nextStartedActivity
-        assertEquals("com.geniex.demo.image.LoraLabActivity",intent.component?.className)
-        assertEquals("com.geniex.demo",intent.component?.packageName)
+        val texts=views(a.binding.drawerImageSettingsGroup).filterIsInstance<TextView>().map{it.text.toString()}
+        assertFalse(texts.any{it=="LoRA 管理与 NPU 测试"})
+        assertFalse(texts.any{it=="分享启动诊断"})
+        assertEquals(View.VISIBLE,a.binding.btnImageModelCenter.visibility)
+        a.binding.btnImageModelCenter.performClick()
+        val intent=shadowOf(a).nextStartedActivity
+        assertEquals("com.geniex.demo.image.ModelUpdateActivity",intent.component?.className)
         c.pause().stop().destroy()
     }
-    @Test fun diagnosticsAccessibleWithoutOpeningLab() {
-        val c=Robolectric.buildActivity(MainIntegrationActivity::class.java).setup().visible();val a=c.get()
-        views(a.binding.drawerImageSettingsGroup).filterIsInstance<TextView>().single{it.text.toString()=="分享启动诊断"}.performClick()
-        assertEquals(Intent.ACTION_CHOOSER,shadowOf(a).nextStartedActivity.action)
+    @Test fun modelCenterExposesLoraAndAdvancedTools() {
+        val prompt="portrait, <lora:Alyosha:0.6>"
+        val intent=Intent(RuntimeEnvironment.getApplication(),ModelUpdateActivity::class.java)
+            .putExtra(ModelUpdateActivity.EXTRA_SKIP_AUTO_CHECK,true)
+            .putExtra(ModelUpdateActivity.EXTRA_PROMPT,prompt)
+        val c=Robolectric.buildActivity(ModelUpdateActivity::class.java,intent).setup().visible();val a=c.get()
+        assertEquals(View.VISIBLE,a.findViewById<View>(R.id.btn_model_center_lora).visibility)
+        assertEquals(View.VISIBLE,a.findViewById<View>(R.id.btn_model_center_runtime_check).visibility)
+        assertEquals(View.VISIBLE,a.findViewById<View>(R.id.btn_model_center_npu_test).visibility)
+        a.findViewById<View>(R.id.btn_model_center_lora).performClick();idle()
+        val started=shadowOf(a).nextStartedActivity
+        assertEquals("com.geniex.demo.image.LoraLabActivity",started.component?.className)
+        assertEquals(prompt,started.getStringExtra(LoraLabActivity.EXTRA_PROMPT))
         c.pause().stop().destroy()
+    }
+    @Test fun mainActivityManifestSuppressesImeRestore() {
+        val app=RuntimeEnvironment.getApplication()
+        val info=app.packageManager.getActivityInfo(ComponentName(app.packageName,"com.geniex.demo.MainActivity"),0)
+        val state=info.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
+        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN,state)
     }
     @Test fun selectorDisplaysOnlyInstalledSizes() {
         val c=Robolectric.buildActivity(MainIntegrationActivity::class.java).setup().visible();val a=c.get()
