@@ -1,103 +1,127 @@
-> This branch builds 1.6.0-alpha.2 as an in-place Rin NPU Agent update. Startup and preset management are repaired; full WAI LoRA and additional native resolutions remain pending. See [alpha.2 release notes](docs/RELEASE_1.6.0-alpha.2.md).
-
 # Rin NPU Agent
 
 [简体中文](README.zh-CN.md)
 
-Android ARM64 on-device AI workspace for Snapdragon NPU devices. Rin NPU Agent combines local LLM/VLM chat, project-scoped Agent tools, persistent projects/conversations, and a WAI/SDXL image-generation workspace in one application.
+Rin NPU Agent is an Android ARM64 on-device AI workspace for Snapdragon NPU devices. It combines local LLM/VLM chat, project-scoped Agent tools, persistent projects and conversations, and a WAI/SDXL image-generation workspace in one application.
 
-**Current stable version:** `1.5.11` · package `com.geniex.demo` · `arm64-v8a`
+**Stable release:** [`1.6.0`](https://github.com/reimurin/Rin-NPU-Agent/releases/tag/v1.6.0) · version code `28` · package `com.geniex.demo` · `arm64-v8a`
 
-## Features
+[Download APK](https://github.com/reimurin/Rin-NPU-Agent/releases/download/v1.6.0/Rin-NPU-Agent-v1.6.0-debug-runtime-ready.apk)
 
-### Chat & Agent
+## What ships in 1.6.0
+
+### Local Chat & Agent
 
 - Local LLM and VLM inference through Qualcomm GenieX.
-- NPU-first model selection where QAIRT packages are available, with compatible GPU/CPU runtimes as alternatives.
+- NPU-first execution for compatible QAIRT models, with supported GPU/CPU runtimes available for GGUF models.
 - Persistent **Project → Conversation → Message** hierarchy.
-- Project-scoped SAF workspaces for Agent file operations.
-- Cross-project and cross-conversation context retrieval on explicit request.
-- Local file tools and local PowerPoint generation.
-- In-app model library and model downloading; model weights are kept outside the APK.
+- Independent SAF workspace binding for each project.
+- Explicit cross-project and cross-conversation context retrieval when requested by the user.
+- Local Agent file tools inside the selected project workspace.
+- Local PowerPoint generation through the Agent tool chain.
+- In-app model library, model selection, downloading, loading and unloading.
+- Model weights stay outside the APK and are managed as local model assets.
 
-### Image generation
+### WAI / SDXL image generation
 
-The image workspace uses **WAI Illustrious SDXL + SDXL-Lightning 8-step** on Qualcomm HTP/QNN.
+The image workspace runs **WAI Illustrious SDXL + SDXL-Lightning 8-step** through the Qualcomm QNN/HTP path on the SM8750 / Snapdragon 8 Elite target.
 
-- Chat / Image mode switching.
-- Independent positive and negative prompt libraries.
+- Native `1024×1024`, `832×1216`, and `1216×832` generation paths with the current SM8750 model pack.
+- Positive and negative prompt editors with reusable preset libraries.
 - Named positive presets with notes.
-- Reusable/default/locked negative presets.
-- Resolution presets with `1024×1024` as the default.
+- Default, reusable and lockable negative presets.
 - Real pipeline progress: `CLIP → UNet 1/8 … 8/8 → VAE → save`.
-- Intermediate preview through `preview_current.png` when the installed runtime provides preview decoding.
-- Runtime readiness checks and memory handoff between the chat model and SDXL.
-- Device-specific precompiled package installer.
+- Low-overhead live preview at selected denoising steps.
+- Application-level generation session that survives Activity recreation and foreground/background transitions.
+- Foreground generation service with persistent notification and explicit Stop action.
+- Immediate progress/preview snapshot restoration when returning to the app.
+- Memory handoff between the chat runtime and the SDXL runtime before image generation.
+- Generated-image preview and gallery saving.
+- Runtime readiness checks and automatic recovery for the packaged image-generation environment.
+- Qualcomm HTP performance governor using QAIRT PerfInfrastructure/DCVS, with Boost/Balanced thermal switching and recovery back to Boost.
 
-The SM8750 runtime is published. The project user confirmed successful on-device generation with 1.5.11 on Honor Magic 7 Pro. See the [stable release](https://github.com/reimurin/Rin-NPU-Agent/releases/tag/v1.5.11) and [release notes](docs/RELEASE_1.5.11.md).
+### Dynamic LoRA
 
-## Model package catalog
+- Local `.safetensors` LoRA catalog for the WAI/Illustrious image path.
+- Prompt tags in the form `<lora:name:weight>` with directly editable weights.
+- Multiple LoRA selections within the supported rank budget.
+- Compatibility checks before generation.
+- Recent successful LoRA result history with thumbnail, weight, time and seed.
+- Insert/eject controls that modify prompt tags without deleting local LoRA files.
+- Dynamic LoRA NPU self-test and diagnostic report export.
 
-The canonical catalog is [`models/index.json`](models/index.json). Android clients fetch the fixed URL:
+### Unified Model Center
+
+The image-mode model workflow is consolidated into one **Model** entry with three sections:
+
+- **Basic Model** — installed model-pack version, available native resolutions, LoRA ABI, remote update information and package size.
+- **LoRA** — local LoRA catalog and prompt-weight management.
+- **Advanced** — runtime integrity check/repair, NPU self-test and diagnostic export.
+
+Model-pack updates include:
+
+- Signed manifest verification.
+- Automatic source selection plus explicit GitHub / China-mirror selection.
+- Update check, install, ignore-version and progress reporting.
+- Per-release resolution and LoRA compatibility metadata.
+- Reuse of an already installed compatible model pack across app updates.
+
+## Model package system
+
+The canonical catalog is [`models/index.json`](models/index.json). Android clients use the fixed catalog endpoint:
 
 ```text
 https://raw.githubusercontent.com/reimurin/Rin-NPU-Agent/main/models/index.json
 ```
 
-Each package entry records compatible chipset, ABI, runtime, resolutions, archive checksum and GitHub Release assets. The app matches the current device and selects the best published package.
+Each package entry records the target chipset, ABI, runtime, native resolutions, archive checksums and GitHub Release assets. The app matches the current device against the catalog and selects the corresponding published package.
 
-Large QNN context bundles are stored as **GitHub Release assets**, not in Git history. GitHub requires each Release asset to stay below 2 GiB, so large archives are split into ordered parts. The installer downloads each part, verifies SHA-256, verifies the archive through a concatenated stream and extracts it without writing an intermediate ZIP. CLIP-G repair is downloaded separately.
+Large QNN context bundles are distributed as GitHub Release assets and split into ordered parts. The installer downloads the parts, verifies SHA-256, validates the combined archive stream, and extracts the package directly. Component-level repairs such as CLIP-G can be installed independently.
 
-Adding another Snapdragon generation or QNN profile only requires publishing another package and updating `models/index.json`; the APK keeps the same catalog endpoint.
+The current SM8750 model-pack line provides the native `1024×1024`, `832×1216`, and `1216×832` image-generation paths used by 1.6.0.
 
-## Versioning
-
-Rin NPU Agent uses semantic versioning from this development line onward:
-
-- `1.5.11`, `1.5.12`, ... for fixes and incremental runtime/UI improvements.
-- `1.6.0`, `1.7.0`, ... for larger feature milestones.
-- `2.0.0` for a future breaking application/runtime generation.
-
-Android `versionCode` remains monotonically increasing for in-place upgrades.
-
-## Rin Design System
-
-The UI follows **Rin Design System**, with **integrity** as a project-wide design rule: every new control inherits the same visual language instead of falling back to an unrelated default Android style.
-
-- Unified rounded geometry.
-- Soft, low-contrast strokes and surface separation.
-- Shared card, input, button, list and dialog hierarchy.
-- Primary / secondary / ghost / destructive action levels.
-- Consistent title / section / body / caption typography.
-- `8 / 12 / 16 / 24 dp` spacing rhythm.
-- Flat, restrained runtime/status presentation.
-- Centralized colors, styles and drawables.
-
-The direction is Material-inspired, with a softer and more continuous product language across Chat, Drawer, Model Library and Image mode.
-
-## Architecture
+## App architecture
 
 ```text
 Rin NPU Agent
 ├─ Chat mode
 │  ├─ GenieX model manager
-│  ├─ LLM / VLM runtime
-│  ├─ Projects → Conversations
-│  └─ Project-scoped Agent workspace
+│  ├─ Local LLM / VLM runtime
+│  ├─ Projects → Conversations → Messages
+│  ├─ Project-scoped SAF workspace
+│  └─ Local Agent tools
 │
 └─ Image mode
-   ├─ Positive prompt library
-   ├─ Negative prompt library
-   ├─ Resolution / 8-step profile
-   ├─ GitHub model catalog
-   ├─ Device-specific QNN package installer
-   ├─ WAI/SDXL phone runtime driver
-   └─ Real progress + intermediate preview
+   ├─ Positive / negative prompt presets
+   ├─ Native resolution selector
+   ├─ WAI / SDXL-Lightning 8-step pipeline
+   ├─ Application-level generation session
+   ├─ Foreground generation service
+   ├─ Live preview + progress snapshots
+   ├─ HTP performance governor
+   ├─ Dynamic LoRA manager
+   └─ Model Center
+      ├─ Basic Model
+      ├─ LoRA
+      └─ Advanced diagnostics
 ```
+
+## Rin Design System
+
+The application follows **Rin Design System** across Chat, Drawer, Image mode, model management, presets and dialogs.
+
+- Unified rounded geometry.
+- Soft, low-contrast strokes and layered surfaces.
+- Shared card, input, button, list and dialog hierarchy.
+- Primary / secondary / ghost / destructive action levels.
+- Consistent title / section / body / caption typography.
+- `8 / 12 / 16 / 24 dp` spacing rhythm.
+- Centralized colors, styles and drawables.
+- UI integrity across newly added controls and screens.
 
 ## Target platform
 
-Primary development target: **Snapdragon 8 Elite / SM8750** Android devices.
+Primary validated target: **Snapdragon 8 Elite / SM8750** Android devices.
 
 - `minSdk 31`
 - `targetSdk 34`
@@ -108,12 +132,14 @@ Primary development target: **Snapdragon 8 Elite / SM8750** Android devices.
 - NDK 27.3.13750724
 - GenieX Android 0.3.5
 
+The 1.6.0 image-generation and LoRA chain has been validated on an Honor Magic 7 Pro with Snapdragon 8 Elite.
+
 ## Build
 
-First prepare the [native prerequisites](native/README.md). This source snapshot excludes SDK libraries and is not self-contained. With those prerequisites, use JDK 17, Android SDK 34 and Gradle 8.13:
+Prepare the native prerequisites described in [`native/README.md`](native/README.md), then build with JDK 17, Android SDK 34 and Gradle 8.13:
 
 ```bash
-gradle assembleDebug
+gradle testDebugUnitTest assembleDebug
 ```
 
 APK output:
@@ -122,24 +148,24 @@ APK output:
 build/outputs/apk/debug/app-debug.apk
 ```
 
-Local SDK/NDK/JDK installations, caches, model files, build outputs, signing material and deployment configuration stay outside the repository.
+Local SDK/NDK/JDK installations, caches, model files, signing material and deployment configuration are kept outside the repository.
 
 ## Upstream projects and references
 
 ### Qualcomm AI Hub Apps / GenieX
 
-Rin NPU Agent started from Qualcomm's `geniex_chat_android` application and continues to use GenieX as the local model runtime/model-management layer.
+Rin NPU Agent started from Qualcomm's `geniex_chat_android` application and continues to use GenieX as the local model runtime and model-management layer.
 
 - https://github.com/qualcomm/ai-hub-apps
 - https://github.com/qualcomm/geniex
 
 ### Model-To-NPU
 
-The SDXL/QNN phone runtime follows and extends ideas and runtime components from Model-To-NPU:
+The SDXL/QNN phone runtime follows and extends runtime work from Model-To-NPU:
 
 - https://github.com/VitalikDen0/Model-To-NPU
 
-This includes the Snapdragon 8 Elite QNN/HTP SDXL route, split-UNet context layout, Lightning 8-step path, runtime progress protocol, intermediate-preview plumbing and QNN LoRA context-slot direction.
+This covers the Snapdragon 8 Elite QNN/HTP SDXL route, split UNet contexts, Lightning 8-step execution, runtime progress protocol, live-preview plumbing and the QNN LoRA path.
 
 Model-To-NPU-derived runtime files retain the upstream PolyForm Noncommercial 1.0.0 license and Required Notice. See [`THIRD_PARTY.md`](THIRD_PARTY.md) and [`LICENSES/`](LICENSES/).
 
@@ -154,13 +180,3 @@ The image path uses WAI Illustrious SDXL and ByteDance SDXL-Lightning. Precompil
 - Other dependencies and model packages follow their respective upstream licenses.
 
 See [`THIRD_PARTY.md`](THIRD_PARTY.md) and [`LICENSES/`](LICENSES/).
-
-## Roadmap
-
-- Keep 1.5.11 as the verified stable generation baseline.
-- Add more resolution buckets and Snapdragon targets.
-- Add on-demand local prompt expansion followed by immediate LLM unload before SDXL generation.
-- Add trigger-word-based LoRA discovery and QNN context-slot switching.
-- Continue extending Rin Design System across every new control and screen.
-
-See the [1.6 plan](docs/PLAN_1.6.md) for LoRA import, preview and acceptance stages.
