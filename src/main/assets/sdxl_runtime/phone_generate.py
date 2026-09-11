@@ -416,9 +416,10 @@ QNN_PRESTAGE_RUNTIME = _env_bool(("SDXL_QNN_PRESTAGE_RUNTIME", "QNN_PRESTAGE_RUN
 QNN_PREWARM_ALL_CONTEXTS = _env_bool(("SDXL_QNN_PREWARM_ALL_CONTEXTS", "QNN_PREWARM_ALL_CONTEXTS"), True)
 QNN_PREWARM_PREVIEW = _env_bool(("SDXL_QNN_PREWARM_PREVIEW", "QNN_PREWARM_PREVIEW"), True)
 PREVIEW_PNG_COMPRESS_LEVEL = max(0, min(9, int(os.environ.get("SDXL_QNN_PREVIEW_PNG_COMPRESS", "0"))))
+PREVIEW_MAX_EDGE = 384
 FINAL_PNG_COMPRESS_LEVEL = max(0, min(9, int(os.environ.get("SDXL_QNN_FINAL_PNG_COMPRESS", "0"))))
 STRETCH_SAMPLE_STRIDE = max(1, int(os.environ.get("SDXL_QNN_STRETCH_SAMPLE_STRIDE", "4")))
-TAESD_BACKEND = os.environ.get("SDXL_QNN_TAESD_BACKEND", "gpu").strip().lower() or "gpu"
+TAESD_BACKEND = os.environ.get("SDXL_QNN_TAESD_BACKEND", "none").strip().lower() or "none"
 TAESD_BACKEND_LIB = os.environ.get("SDXL_QNN_TAESD_BACKEND_LIB", "").strip()
 TAESD_CONFIG_FILE = os.environ.get("SDXL_QNN_TAESD_CONFIG_FILE", "").strip()
 TAESD_QNN_NET_RUN = os.environ.get("SDXL_QNN_TAESD_NET_RUN", DEFAULT_TAESD_QNN_NET_RUN).strip() or QNN_NET_RUN
@@ -1009,11 +1010,7 @@ def _prepare_preview_backend() -> None:
             "falling back to ONNX CPU if available"
         )
     else:
-        _emit_taesd_warning_once(
-            "no_preview_backend",
-            "TAESD live preview is unavailable; generation will continue without live preview",
-        )
-        _log("  [TAESD] no preview backend available")
+        _log("  [PREVIEW backend] LATENT_FAST (optional TAESD runtime not installed)")
 
 
 def _get_ort_session():
@@ -3138,17 +3135,11 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
 
         if preview:
             stride = _preview_stride(steps)
-            is_last = (si == steps - 1)
-            if is_last or (si % stride == stride - 1):
-                if is_last:
-                    # Last step: run synchronously to guarantee preview is visible
-                    _join_preview_thread()
-                    _preview_step(latents.copy(), si, steps)
-                else:
-                    _start_bg_preview(latents.copy(), si, steps)
+            one_based = si + 1
+            if one_based < steps and one_based % stride == 0:
+                _start_bg_preview(latents.copy(), si, steps)
 
-    if preview:
-        _join_preview_thread()
+    # Final VAE has priority; never wait for a final-step preview.
 
     _log(f"  UNet total: {total_unet_ms:.0f}ms ({total_unet_ms/steps:.0f}ms/step)")
 
@@ -3224,7 +3215,7 @@ def _preview_step(latents: np.ndarray, step_idx: int, total_steps: int) -> None:
             )
             _log(f"  [TAESD] QNN preview fallback to ONNX CPU: {e}")
 
-    sess = _get_ort_session()
+    sess = _get_ort_session() if os.path.exists(TAESD_ONNX) else None
     if sess is None:
         t0 = time.time()
         try:
@@ -3332,8 +3323,11 @@ def _save_preview_png(out_tensor: np.ndarray) -> None:
 
     tmp_path = PREVIEW_PNG + ".tmp"
     img_pil = Image.fromarray(img_u8)
-    if img_pil.width != _REQ_WIDTH or img_pil.height != _REQ_HEIGHT:
-        img_pil = img_pil.resize((_REQ_WIDTH, _REQ_HEIGHT), Image.Resampling.BILINEAR)
+    longest = max(img_pil.size)
+    if longest > PREVIEW_MAX_EDGE:
+        scale = PREVIEW_MAX_EDGE / float(longest)
+        target = (max(1, int(round(img_pil.width * scale))), max(1, int(round(img_pil.height * scale))))
+        img_pil = img_pil.resize(target, Image.Resampling.BILINEAR)
     img_pil.save(
         tmp_path,
         format="PNG",
@@ -3454,10 +3448,8 @@ def _preview_stride(total_steps: int) -> int:
 def _start_bg_preview(latents_copy: np.ndarray, step_idx: int, total_steps: int) -> None:
     global _preview_thread
     if _preview_thread and _preview_thread.is_alive():
-        _preview_thread.join(timeout=0.2)
-        if _preview_thread.is_alive():
-            _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] skipped (previous decode still running)")
-            return
+        _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] skipped (decoder busy; generation has priority)")
+        return
     _preview_thread = threading.Thread(
         target=_preview_step,
         args=(latents_copy, step_idx, total_steps),

@@ -60,6 +60,7 @@ class ImageModeController(
     private var activeGenerationSeed: Long = -1L
     @Volatile private var autoContextRepairRequested = false
     private var resolutions = emptyList<ImageResolution>()
+    private var uiActive = false
 
     fun setup() {
         setupSpinners()
@@ -69,7 +70,7 @@ class ImageModeController(
         val automationSeed = if (test.autorun) resolveImageGenerationSeed(activity.intent, allowTestOverride = true) else null
         test.prompt?.let { binding.etImagePrompt.setText(it) }
         applyMode(if (test.autorun) AppMode.IMAGE else currentMode, persist = false)
-        ImageGenerationSession.attach(generationListener, replay = true)
+        ImageGenerationSession.attach(generationListener, replay = false)
         ImageGenerationSession.currentRequest()?.let { activeGenerationSeed = it.seed }
         if (ImageGenerationSession.isRunning()) setGenerating(true)
         if (test.autorun) {
@@ -83,13 +84,16 @@ class ImageModeController(
     }
 
     fun onResume() {
+        uiActive = true
+        renderSessionSnapshot(ImageGenerationSession.snapshot())
         if (currentMode == AppMode.IMAGE) refreshRuntimeStatus(false)
         if (prefs.getBoolean(KEY_BROWSER_PENDING, false) && !installer.isBusy()) resumeBrowserImport()
-        ImageGenerationSession.replay(generationListener)
-        if (ImageGenerationSession.isRunning()) { activeGenerationSeed = ImageGenerationSession.currentRequest()?.seed ?: activeGenerationSeed; setGenerating(true) }
     }
 
+    fun onPause() { uiActive = false }
+
     fun dispose() {
+        uiActive = false
         ImageGenerationSession.detach(generationListener)
         installer.cancel()
         RuntimeDownloadForegroundService.stop(activity)
@@ -488,7 +492,20 @@ class ImageModeController(
         }, "rin-image-preflight").start()
     }
 
-    private fun handleRuntimeEvent(event: ImageGenerationEvent) {
+    private fun renderSessionSnapshot(snapshot: ImageGenerationSessionSnapshot) {
+        if (!uiActive) return
+        snapshot.progress?.let { handleRuntimeEvent(it, replay = true) }
+        snapshot.latestPreview?.let { handleRuntimeEvent(it, replay = true) }
+        snapshot.warning?.let { handleRuntimeEvent(it, replay = true) }
+        snapshot.terminal?.let { handleRuntimeEvent(it, replay = true) }
+        if (snapshot.running) {
+            activeGenerationSeed = snapshot.request?.seed ?: activeGenerationSeed
+            setGenerating(true)
+        }
+    }
+
+    private fun handleRuntimeEvent(event: ImageGenerationEvent, replay: Boolean = false) {
+        if (!uiActive) return
         activity.runOnUiThread {
             when (event) {
                 is ImageGenerationEvent.Progress -> {
@@ -534,7 +551,7 @@ class ImageModeController(
                     setGenerating(false)
                     binding.tvImageGenerationTiming.visibility = View.VISIBLE
                     binding.tvImageGenerationTiming.text = activity.getString(R.string.runtime_generate_failed, event.message)
-                    Toast.makeText(activity, activity.getString(R.string.runtime_generate_failed, event.message), Toast.LENGTH_LONG).show()
+                    if (!replay) Toast.makeText(activity, activity.getString(R.string.runtime_generate_failed, event.message), Toast.LENGTH_LONG).show()
                 }
                 ImageGenerationEvent.Cancelled -> {
                     activeGenerationSeed = -1L

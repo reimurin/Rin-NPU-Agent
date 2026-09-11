@@ -1945,6 +1945,11 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onPause() {
+        if (::imageModeController.isInitialized) imageModeController.onPause()
+        super.onPause()
+    }
+
     override fun onStop() {
         persistCurrentConversation()
         super.onStop()

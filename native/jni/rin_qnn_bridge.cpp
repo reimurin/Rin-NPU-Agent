@@ -15,6 +15,7 @@
 #include "PAL/DynamicLoading.hpp"
 #include "QnnSampleApp.hpp"
 #include "QnnSampleAppUtils.hpp"
+#include "HTP/QnnHtpDevice.h"
 
 namespace {
 
@@ -318,6 +319,7 @@ cleanup:
   return makeResult(env, ok, stage, detail, elapsedMs(), backendBuild, operationLog);
 }
 
+#include "rin_htp_perf.inc"
 #include "rin_qnn_persistent.inc"
 
 // Isolated 1.6 LoRA sequence self-test. The normal generation entry is unchanged.

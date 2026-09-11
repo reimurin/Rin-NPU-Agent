@@ -1,6 +1,8 @@
 package com.geniex.demo.image
 
 import android.content.Context
+import android.os.Build
+import android.os.PowerManager
 import android.system.Os
 import android.util.Log
 import org.json.JSONObject
@@ -41,6 +43,9 @@ internal object QnnInProcessNative {
     ): String
 
     external fun releasePersistentContexts(): String
+    external fun beginHtpPerformance(backendPath: String, mode: Int): String
+    external fun setHtpPerformanceMode(mode: Int): String
+    external fun endHtpPerformance(): String
 }
 
 internal class QnnInProcessBridgeServer(
@@ -67,6 +72,18 @@ internal class QnnInProcessBridgeServer(
             .getOrElse { "reset-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
         appendLog("PERSISTENT_RESET raw=$cacheReset")
         preloadSummary = configureAndPreload()
+
+        val perfBackend = File(context.applicationInfo.nativeLibraryDir, "libQnnHtp.so")
+        val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            (context.getSystemService(Context.POWER_SERVICE) as PowerManager).currentThermalStatus
+        } else {
+            PowerManager.THERMAL_STATUS_NONE
+        }
+        val perfMode = if (thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE) HTP_MODE_BALANCED else HTP_MODE_BOOST
+        val perfStart = runCatching { QnnInProcessNative.beginHtpPerformance(perfBackend.absolutePath, perfMode) }
+            .getOrElse { "unsupported:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("HTP_PERF_START mode=$perfMode thermal=$thermalStatus raw=$perfStart")
+
         val socket = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
         server = socket
         running.set(true)
@@ -219,6 +236,9 @@ internal class QnnInProcessBridgeServer(
         val release = runCatching { QnnInProcessNative.releasePersistentContexts() }
             .getOrElse { "release-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
         appendLog("PERSISTENT_RELEASE raw=$release")
+        val perfEnd = runCatching { QnnInProcessNative.endHtpPerformance() }
+            .getOrElse { "release-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("HTP_PERF_END raw=$perfEnd")
         appendLog("STOP")
         server = null
         worker = null
@@ -226,5 +246,7 @@ internal class QnnInProcessBridgeServer(
 
     companion object {
         private const val TAG = "RinQnnBridge"
+        const val HTP_MODE_BALANCED = 1
+        const val HTP_MODE_BOOST = 2
     }
 }
