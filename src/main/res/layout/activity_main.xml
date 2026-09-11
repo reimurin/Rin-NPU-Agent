@@ -6,7 +6,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/rin_bg"
-    android:fitsSystemWindows="true">
+    android:fitsSystemWindows="true"
+    android:focusableInTouchMode="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -654,11 +655,24 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:visibility="gone">
-                    <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/image_runtime_section" />
+                    <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="模型" />
                     <com.google.android.material.card.MaterialCardView
                         style="@style/Widget.Rin.Card.Soft"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                            <TextView android:id="@+id/tv_image_model_status_summary" style="@style/TextAppearance.Rin.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="基础模型：检测中…" android:textStyle="bold" />
+                            <TextView android:id="@+id/tv_image_lora_status_summary" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="LoRA：未启用" />
+                            <com.google.android.material.button.MaterialButton android:id="@+id/btn_image_model_center" style="@style/Widget.Rin.Button.Secondary" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="10dp" android:text="模型管理" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <TextView style="@style/TextAppearance.Rin.Section" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:paddingStart="6dp" android:paddingBottom="6dp" android:text="@string/image_runtime_section" android:visibility="gone" />
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Rin.Card.Soft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone">
                         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
                             <TextView style="@style/TextAppearance.Rin.Body" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="WAI Illustrious SDXL" android:textStyle="bold" />
                             <TextView android:id="@+id/tv_image_runtime_status" style="@style/TextAppearance.Rin.Caption" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/image_runtime_unknown" />
@@ -669,6 +683,47 @@
                         </LinearLayout>
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
+
+                <TextView
+                    style="@style/TextAppearance.Rin.Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:paddingStart="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/model_update_drawer_section" 
+                    android:visibility="gone" />
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Rin.Card.Soft"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+                        <TextView
+                            style="@style/TextAppearance.Rin.Body"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/model_update_title"
+                            android:textStyle="bold" />
+                        <TextView
+                            style="@style/TextAppearance.Rin.Caption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/model_update_drawer_hint" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_model_update"
+                            style="@style/Widget.Rin.Button.Secondary"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/model_update_open" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_clear_history"

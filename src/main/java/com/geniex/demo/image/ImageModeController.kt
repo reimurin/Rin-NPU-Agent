@@ -18,11 +18,28 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
+import androidx.core.widget.doAfterTextChanged
 import com.geniex.demo.R
 import com.geniex.demo.databinding.ActivityMainBinding
 import java.io.File
 import java.io.FileInputStream
 import java.util.Locale
+
+internal fun resolveImageGenerationSeed(
+    intent: Intent,
+    allowTestOverride: Boolean = false,
+    now: () -> Long = { System.currentTimeMillis() },
+): Long {
+    val override = if (allowTestOverride) intent.getLongExtra(ImageModeController.EXTRA_TEST_SEED, -1L) else -1L
+    return if (override in 0L..0x7fffffffL) override else (now() and 0x7fffffffL)
+}
+
+internal data class ImageTestAutomation(val prompt: String?, val autorun: Boolean)
+
+internal fun resolveImageTestAutomation(intent: Intent): ImageTestAutomation {
+    val prompt = intent.getStringExtra(ImageModeController.EXTRA_TEST_PROMPT)?.takeIf { it.isNotBlank() }
+    return ImageTestAutomation(prompt, prompt != null && intent.getBooleanExtra(ImageModeController.EXTRA_TEST_AUTORUN, false))
+}
 
 class ImageModeController(
     private val activity: Activity,
@@ -33,35 +50,68 @@ class ImageModeController(
 
     private val prefs = activity.getSharedPreferences("rin_image_ui", Activity.MODE_PRIVATE)
     private val presetStore = PromptPresetStore(activity)
-    private val runtime = ImageGenerationRuntime(activity)
+    private val runtime = ImageGenerationRuntime(activity.applicationContext)
     private val installer = GitHubImageRuntimeInstaller(activity, runtime)
+    private val generationListener: (ImageGenerationEvent) -> Unit = { event -> handleRuntimeEvent(event) }
     private var currentMode = runCatching {
         AppMode.valueOf(prefs.getString(KEY_MODE, AppMode.CHAT.name) ?: AppMode.CHAT.name)
     }.getOrDefault(AppMode.CHAT)
     private var lastGeneratedFile: File? = null
     private var lastRuntimeStatus: ImageRuntimeStatus? = null
+    private var activeGenerationSeed: Long = -1L
     @Volatile private var autoContextRepairRequested = false
-    private val resolutions = ImageGenerationRuntime.UI_RESOLUTIONS
+    private var resolutions = emptyList<ImageResolution>()
+    private var uiActive = false
 
     fun setup() {
         setupSpinners()
         setupPromptState()
         setupListeners()
-        applyMode(currentMode, persist = false)
+        val test = resolveImageTestAutomation(activity.intent)
+        val automationSeed = if (test.autorun) resolveImageGenerationSeed(activity.intent, allowTestOverride = true) else null
+        test.prompt?.let { binding.etImagePrompt.setText(it) }
+        applyMode(if (test.autorun) AppMode.IMAGE else currentMode, persist = false)
+        ImageGenerationSession.attach(generationListener, replay = false)
+        ImageGenerationSession.currentRequest()?.let { activeGenerationSeed = it.seed }
+        if (ImageGenerationSession.isRunning()) setGenerating(true)
+        if (test.autorun) {
+            activity.window.decorView.postDelayed({
+                if (!activity.isFinishing && !activity.isDestroyed && !ImageGenerationSession.isRunning()) startGeneration(automationSeed)
+                activity.intent.removeExtra(EXTRA_TEST_SEED)
+                activity.intent.removeExtra(EXTRA_TEST_PROMPT)
+                activity.intent.removeExtra(EXTRA_TEST_AUTORUN)
+            }, 2500L)
+        }
     }
 
     fun onResume() {
+        uiActive = true
+        refreshModelCenterSummary()
+        renderSessionSnapshot(ImageGenerationSession.snapshot())
         if (currentMode == AppMode.IMAGE) refreshRuntimeStatus(false)
         if (prefs.getBoolean(KEY_BROWSER_PENDING, false) && !installer.isBusy()) resumeBrowserImport()
     }
 
+    fun onPause() { uiActive = false }
+
     fun dispose() {
+        uiActive = false
+        ImageGenerationSession.detach(generationListener)
         installer.cancel()
         RuntimeDownloadForegroundService.stop(activity)
-        runtime.stop()
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == REQUEST_LORA_EDITOR || requestCode == REQUEST_MODEL_CENTER) {
+            if (resultCode == Activity.RESULT_OK) {
+                data?.getStringExtra(LoraLabActivity.EXTRA_PROMPT)?.let { text ->
+                    runCatching { LoraTags.parse(text) }.onSuccess { binding.etImagePrompt.setText(text) }
+                        .onFailure { Toast.makeText(activity,it.message ?: "LoRA 标签无效",Toast.LENGTH_LONG).show() }
+                }
+            }
+            return true
+        }
+
         if (requestCode != REQUEST_RUNTIME_DOWNLOAD_DIR) return false
         if (resultCode == Activity.RESULT_OK) {
             val uri = data?.data
@@ -76,18 +126,7 @@ class ImageModeController(
     }
 
     private fun setupSpinners() {
-        val labels = listOf(
-            activity.getString(R.string.preset_1024),
-            activity.getString(R.string.preset_1216_832),
-            activity.getString(R.string.preset_832_1216),
-            activity.getString(R.string.preset_1344_768),
-            activity.getString(R.string.preset_768_1344),
-        )
-        binding.spImageResolution.adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_item, labels).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
-        val selected = resolutions.indexOfFirst { it.key == prefs.getString(KEY_RESOLUTION, "1024x1024") }.coerceAtLeast(0)
-        binding.spImageResolution.setSelection(selected)
+        updateResolutionChoices(emptyList())
         binding.spImageResolution.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
                 resolutions.getOrNull(position)?.let { prefs.edit().putString(KEY_RESOLUTION, it.key).apply() }
@@ -102,6 +141,21 @@ class ImageModeController(
         binding.spImageProfile.isEnabled = false
     }
 
+    private fun updateResolutionChoices(installed: List<ImageResolution>) {
+        if (resolutions == installed && binding.spImageResolution.adapter != null) return
+        val preferred = prefs.getString(KEY_RESOLUTION, "1024x1024")
+        resolutions = installed
+        val labels = if (installed.isEmpty()) listOf("等待检测已安装的原生尺寸") else installed.map { "${it.width} × ${it.height} · 原生" }
+        binding.spImageResolution.adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_item, labels).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        binding.spImageResolution.setSelection(installed.indexOfFirst { it.key == preferred }.coerceAtLeast(0))
+        binding.spImageResolution.isEnabled = installed.isNotEmpty() && !ImageGenerationSession.isRunning()
+        if (installed.isNotEmpty() && installed.none { it.key == preferred } && preferred != "1024x1024") {
+            Toast.makeText(activity, "原选择尺寸未安装；已显示可用的原生尺寸，其他尺寸需对应模型包。", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun setupPromptState() {
         val locked = prefs.getBoolean(KEY_NEGATIVE_LOCKED, false)
         binding.switchLockNegative.isChecked = locked
@@ -111,15 +165,19 @@ class ImageModeController(
             binding.etImageNegativePrompt.isEnabled = !value
         }
         if (binding.etImageNegativePrompt.text.isNullOrBlank()) {
-            presetStore.defaultNegative()?.let {
-                binding.etImageNegativePrompt.setText(it.prompt)
-                presetStore.touchNegative(it.id)
-            }
+            runCatching {
+                presetStore.defaultNegative()?.let {
+                    binding.etImageNegativePrompt.setText(it.prompt)
+                    presetStore.touchNegative(it.id)
+                }
+            }.onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show() }
         }
         binding.switchLivePreview.isChecked = prefs.getBoolean(KEY_LIVE_PREVIEW, true)
         binding.switchLivePreview.setOnCheckedChangeListener { _, value ->
             prefs.edit().putBoolean(KEY_LIVE_PREVIEW, value).apply()
         }
+        binding.etImagePrompt.doAfterTextChanged { refreshModelCenterSummary() }
+        refreshModelCenterSummary()
     }
 
     private fun setupListeners() {
@@ -134,18 +192,27 @@ class ImageModeController(
         binding.btnImageCheckRuntime.setOnClickListener {
             if (runtime.hasStorageAccess()) refreshRuntimeStatus(true) else requestAllFilesAccess()
         }
-        binding.btnImageGenerate.setOnClickListener { startGeneration() }
-        binding.btnImageStop.setOnClickListener {
-            runtime.stop()
-            setGenerating(false)
-            binding.tvImageGenerationStatus.text = activity.getString(R.string.image_status_idle)
+        binding.btnImageModelCenter.setOnClickListener {
+            if (ImageGenerationSession.isRunning()) {
+                Toast.makeText(activity, "请等待当前生图完成后再打开模型管理", Toast.LENGTH_LONG).show()
+            } else if (installer.isBusy()) {
+                Toast.makeText(activity, "请先完成或暂停当前模型下载", Toast.LENGTH_LONG).show()
+            } else {
+                activity.startActivityForResult(
+                    Intent(activity, ModelUpdateActivity::class.java)
+                        .putExtra(ModelUpdateActivity.EXTRA_PROMPT, binding.etImagePrompt.text?.toString().orEmpty()),
+                    REQUEST_MODEL_CENTER,
+                )
+            }
         }
+        binding.btnImageGenerate.setOnClickListener { startGeneration() }
+        binding.btnImageStop.setOnClickListener { ImageGenerationSession.stop(activity) }
         binding.btnImageSave.setOnClickListener { saveLastImageToGallery() }
     }
 
     private fun showModeDialog() {
         val items = arrayOf(activity.getString(R.string.mode_chat), activity.getString(R.string.mode_image))
-        AlertDialog.Builder(activity)
+        RinControls.dialog(activity)
             .setTitle(R.string.select_mode)
             .setSingleChoiceItems(items, if (currentMode == AppMode.CHAT) 0 else 1) { dialog, which ->
                 applyMode(if (which == 0) AppMode.CHAT else AppMode.IMAGE)
@@ -167,17 +234,46 @@ class ImageModeController(
         binding.tvTopMode.setText(if (image) R.string.mode_image else R.string.mode_chat)
         binding.btnModeSwitch.setText(if (image) R.string.mode_image else R.string.mode_chat)
         binding.btnModeSwitch.icon = ContextCompat.getDrawable(activity, if (image) R.drawable.ic_image_mode_24 else R.drawable.ic_chat_mode_24)
-        if (image) refreshRuntimeStatus(false)
+        if (image) { refreshRuntimeStatus(false); refreshModelCenterSummary() }
+    }
+
+    private fun refreshModelCenterSummary() {
+        val pack = runCatching { ModelPackUpdateManager(activity).currentPack() }.getOrNull()
+        binding.tvImageModelStatusSummary.text = if (pack == null) {
+            "基础模型：未安装 model-pack"
+        } else {
+            val sizes = pack.resolutions.joinToString(" / ") { "${it.width}×${it.height}" }
+            "基础模型：${pack.version}" + if (sizes.isBlank()) "" else " · $sizes"
+        }
+        val selected = runCatching { LoraTags.parse(binding.etImagePrompt.text?.toString().orEmpty()).selections }.getOrDefault(emptyList())
+        binding.tvImageLoraStatusSummary.text = if (selected.isEmpty()) {
+            "LoRA：未启用"
+        } else {
+            "LoRA：" + selected.joinToString(" · ") { "${it.name} ${it.weight}" }
+        }
+    }
+    private fun inspectOrReport(): ImageRuntimeStatus? = try {
+        runtime.inspect()
+    } catch (e:Exception) {
+        StartupDiagnostics.record(activity,"ImageGenerationRuntime.inspect",e)
+        activity.runOnUiThread {
+            if (!activity.isFinishing && !activity.isDestroyed) {
+                binding.tvImageRuntimeStatus.text="运行时暂不可访问：${e.message}"
+                updateResolutionChoices(emptyList())
+            }
+        }
+        null
     }
 
     private fun refreshRuntimeStatus(showToast: Boolean) {
         binding.tvImageRuntimeStatus.setText(R.string.runtime_checking)
         Thread({
-            val status = runtime.inspect()
+            val status = inspectOrReport() ?: return@Thread
             activity.runOnUiThread {
                 lastRuntimeStatus = status
+                updateResolutionChoices(status.availableResolutions)
                 binding.tvImageRuntimeStatus.text = runtimeStatusText(status)
-                if (runtime.hasKnownBadClipG() && !installer.isBusy() && !autoContextRepairRequested) {
+                if (runtime.hasKnownBadClipG(status.baseDir) && !installer.isBusy() && !autoContextRepairRequested) {
                     autoContextRepairRequested = true
                     binding.tvImageRuntimeStatus.text = "检测到旧版 CLIP-G 上下文，正在自动修复…"
                     startAcceleratedRuntimeInstall()
@@ -194,13 +290,13 @@ class ImageModeController(
     }
 
     private fun showRuntimeInstallOptions() {
-        val current = runtime.inspect()
+        val current = inspectOrReport() ?: return
         if (current.ready) {
             Toast.makeText(activity, R.string.image_runtime_ready, Toast.LENGTH_SHORT).show()
             return
         }
         val items = arrayOf(activity.getString(R.string.runtime_download_mode_app), activity.getString(R.string.runtime_download_mode_browser))
-        AlertDialog.Builder(activity)
+        RinControls.dialog(activity)
             .setTitle(R.string.runtime_download_mode_title)
             .setItems(items) { _, which -> if (which == 0) startAcceleratedRuntimeInstall() else startBrowserDownloadFlow() }
             .setNegativeButton(android.R.string.cancel, null)
@@ -345,7 +441,7 @@ class ImageModeController(
         !status.pythonDependenciesOk -> status.detail ?: (activity.getString(R.string.runtime_python_missing) + " · numpy/Pillow")
         status.missingCommonFiles.isNotEmpty() || status.availableResolutions.isEmpty() ->
             activity.getString(R.string.runtime_context_missing) + " · " + status.missingCommonFiles.take(3).joinToString(", ")
-        else -> activity.getString(R.string.image_runtime_ready) + " · " + status.availableResolutions.joinToString { it.key } +
+        else -> activity.getString(R.string.image_runtime_ready) + " · " + status.availableResolutions.joinToString { it.key } + "（原生；其他尺寸需要对应模型包）" +
             if (status.previewSupported) " · ${activity.getString(R.string.runtime_preview_enabled)}" else " · ${activity.getString(R.string.runtime_preview_disabled)}"
     }
 
@@ -356,7 +452,7 @@ class ImageModeController(
             .onFailure { activity.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)) }
     }
 
-    private fun startGeneration() {
+    private fun startGeneration(seedOverride: Long? = null) {
         val prompt = binding.etImagePrompt.text?.toString().orEmpty().trim()
         if (prompt.isEmpty()) {
             binding.etImagePrompt.error = activity.getString(R.string.positive_prompt)
@@ -366,20 +462,24 @@ class ImageModeController(
             requestAllFilesAccess()
             return
         }
-        if (runtime.isRunning()) return
-        val resolution = resolutions.getOrElse(binding.spImageResolution.selectedItemPosition) { resolutions.first() }
+        if (ImageGenerationSession.isRunning() || LoraSelfTest.busy.get()) {
+            Toast.makeText(activity,"已有生图或 LoRA 自测正在执行，请稍候",Toast.LENGTH_SHORT).show();return
+        }
+        val resolution = resolutions.getOrNull(binding.spImageResolution.selectedItemPosition)
+        if (resolution == null) { refreshRuntimeStatus(true);return }
         val negative = binding.etImageNegativePrompt.text?.toString().orEmpty()
         Thread({
-            val status = runtime.inspect()
+            val status = inspectOrReport() ?: return@Thread
             activity.runOnUiThread {
                 lastRuntimeStatus = status
+                updateResolutionChoices(status.availableResolutions)
                 binding.tvImageRuntimeStatus.text = runtimeStatusText(status)
                 if (!status.ready) {
                     Toast.makeText(activity, R.string.image_mode_requires_runtime, Toast.LENGTH_LONG).show()
                     return@runOnUiThread
                 }
                 if (!status.supports(resolution)) {
-                    Toast.makeText(activity, "${resolution.key}: ${activity.getString(R.string.runtime_context_missing)}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(activity, "${resolution.key} 尚未安装对应的原生模型。请从已安装尺寸中选择。", Toast.LENGTH_LONG).show()
                     return@runOnUiThread
                 }
                 onNeedMemoryForGeneration {
@@ -389,28 +489,46 @@ class ImageModeController(
                     binding.imageGenerationProgress.progress = 0
                     binding.tvImageGenerationTiming.visibility = View.GONE
                     setGenerating(true)
-                    val started = runtime.generate(
+                    val generationSeed = seedOverride ?: resolveImageGenerationSeed(activity.intent)
+                    activeGenerationSeed = generationSeed
+                    val started = ImageGenerationSession.start(
+                        activity,
                         ImageGenerationRequest(
                             prompt = prompt,
                             negativePrompt = negative,
                             resolution = resolution,
                             steps = 8,
                             cfg = 3.5f,
+                            seed = generationSeed,
                             livePreview = binding.switchLivePreview.isChecked && status.previewSupported,
                             progressiveCfg = true,
                         ),
-                        callback = ::handleRuntimeEvent,
                     )
-                    if (!started) setGenerating(false)
+                    if (!started) { activeGenerationSeed = -1L; setGenerating(false) }
                 }
             }
         }, "rin-image-preflight").start()
     }
 
-    private fun handleRuntimeEvent(event: ImageGenerationEvent) {
+    private fun renderSessionSnapshot(snapshot: ImageGenerationSessionSnapshot) {
+        if (!uiActive) return
+        snapshot.progress?.let { handleRuntimeEvent(it, replay = true) }
+        snapshot.latestPreview?.let { handleRuntimeEvent(it, replay = true) }
+        snapshot.warning?.let { handleRuntimeEvent(it, replay = true) }
+        snapshot.terminal?.let { handleRuntimeEvent(it, replay = true) }
+        if (snapshot.running) {
+            activeGenerationSeed = snapshot.request?.seed ?: activeGenerationSeed
+            setGenerating(true)
+        }
+    }
+
+    private fun handleRuntimeEvent(event: ImageGenerationEvent, replay: Boolean = false) {
+        if (!uiActive) return
         activity.runOnUiThread {
             when (event) {
                 is ImageGenerationEvent.Progress -> {
+                    if (event.stage != ImageGenerationEvent.Stage.COMPLETE) setGenerating(true)
+                    activeGenerationSeed = ImageGenerationSession.currentRequest()?.seed ?: activeGenerationSeed
                     binding.imageGenerationProgress.setProgressCompat(event.percent.coerceIn(0, 100), true)
                     when (event.stage) {
                         ImageGenerationEvent.Stage.PREPARING -> binding.tvImageGenerationStatus.setText(R.string.runtime_stage_start)
@@ -432,6 +550,7 @@ class ImageModeController(
                 is ImageGenerationEvent.Complete -> {
                     lastGeneratedFile = event.file
                     showImage(event.file)
+                    activeGenerationSeed = -1L
                     binding.imageGenerationProgress.setProgressCompat(100, true)
                     binding.tvImageGenerationStep.text = "8/8"
                     binding.tvImageGenerationStatus.setText(R.string.image_status_idle)
@@ -446,10 +565,18 @@ class ImageModeController(
                     binding.btnImageSave.visibility = View.VISIBLE
                 }
                 is ImageGenerationEvent.Failure -> {
+                    activeGenerationSeed = -1L
                     setGenerating(false)
                     binding.tvImageGenerationTiming.visibility = View.VISIBLE
                     binding.tvImageGenerationTiming.text = activity.getString(R.string.runtime_generate_failed, event.message)
-                    Toast.makeText(activity, activity.getString(R.string.runtime_generate_failed, event.message), Toast.LENGTH_LONG).show()
+                    if (!replay) Toast.makeText(activity, activity.getString(R.string.runtime_generate_failed, event.message), Toast.LENGTH_LONG).show()
+                }
+                ImageGenerationEvent.Cancelled -> {
+                    activeGenerationSeed = -1L
+                    setGenerating(false)
+                    binding.tvImageGenerationStatus.text = activity.getString(R.string.image_status_idle)
+                    binding.tvImageGenerationTiming.visibility = View.VISIBLE
+                    binding.tvImageGenerationTiming.text = activity.getString(R.string.image_generation_stopped)
                 }
             }
         }
@@ -470,7 +597,7 @@ class ImageModeController(
         binding.btnImageGenerate.isEnabled = !value
         binding.btnImageStop.visibility = if (value) View.VISIBLE else View.GONE
         if (value) binding.btnImageSave.visibility = View.GONE
-        binding.spImageResolution.isEnabled = !value
+        binding.spImageResolution.isEnabled = !value && resolutions.isNotEmpty()
         binding.switchLivePreview.isEnabled = !value && lastRuntimeStatus?.previewSupported == true
         binding.btnPositivePresetSave.isEnabled = !value
         binding.btnNegativePresetSave.isEnabled = !value
@@ -507,7 +634,7 @@ class ImageModeController(
         val name = EditText(activity).apply { hint = activity.getString(R.string.preset_name); setBackgroundResource(R.drawable.rin_bg_control) }
         val note = EditText(activity).apply { hint = activity.getString(R.string.preset_note_hint); minLines = 2; setBackgroundResource(R.drawable.rin_bg_control) }
         val root = editorLayout(name, note, null)
-        AlertDialog.Builder(activity).setTitle(R.string.positive_preset_title).setView(root)
+        RinControls.dialog(activity).setTitle(R.string.positive_preset_title).setView(root)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.save_positive_preset) { _, _ ->
                 runCatching { presetStore.savePositive(name = name.text.toString(), note = note.text.toString(), prompt = prompt) }
@@ -523,7 +650,7 @@ class ImageModeController(
         val note = EditText(activity).apply { hint = activity.getString(R.string.preset_note_hint); minLines = 2; setBackgroundResource(R.drawable.rin_bg_control) }
         val makeDefault = CheckBox(activity).apply { text = activity.getString(R.string.set_default_negative) }
         val root = editorLayout(name, note, makeDefault)
-        AlertDialog.Builder(activity).setTitle(R.string.negative_preset_title).setView(root)
+        RinControls.dialog(activity).setTitle(R.string.negative_preset_title).setView(root)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.save_negative_preset) { _, _ ->
                 runCatching {
@@ -547,31 +674,23 @@ class ImageModeController(
     }
 
     private fun selectPositivePreset() {
-        val items = presetStore.listPositive()
-        if (items.isEmpty()) { Toast.makeText(activity, R.string.preset_empty, Toast.LENGTH_SHORT).show(); return }
-        val labels = items.map { listOf(it.name, it.note).filter(String::isNotBlank).joinToString("\n") }.toTypedArray()
-        AlertDialog.Builder(activity).setTitle(R.string.select_positive_preset).setItems(labels) { _, which ->
-            items.getOrNull(which)?.let { binding.etImagePrompt.setText(it.prompt); presetStore.touchPositive(it.id) }
-        }.setNegativeButton(android.R.string.cancel, null).show()
+        PresetManagerDialog(activity,presetStore,false) { item -> binding.etImagePrompt.setText(item.prompt) }.show()
     }
-
     private fun selectNegativePreset() {
-        val items = presetStore.listNegative()
-        if (items.isEmpty()) { Toast.makeText(activity, R.string.preset_empty, Toast.LENGTH_SHORT).show(); return }
-        val labels = items.map {
-            (if (it.isDefault) "★ " else "") + listOf(it.name, it.note).filter(String::isNotBlank).joinToString("\n")
-        }.toTypedArray()
-        AlertDialog.Builder(activity).setTitle(R.string.select_negative_preset).setItems(labels) { _, which ->
-            items.getOrNull(which)?.let {
-                if (!binding.switchLockNegative.isChecked) binding.etImageNegativePrompt.setText(it.prompt)
-                presetStore.touchNegative(it.id)
-            }
-        }.setNegativeButton(android.R.string.cancel, null).show()
+        PresetManagerDialog(activity,presetStore,true) { item ->
+            if (!binding.switchLockNegative.isChecked) binding.etImageNegativePrompt.setText(item.prompt)
+            else Toast.makeText(activity,"负面提示词已锁定，请解锁后应用预设",Toast.LENGTH_SHORT).show()
+        }.show()
     }
 
     private fun dp(value: Int): Int = (value * activity.resources.displayMetrics.density).toInt()
 
     companion object {
+        const val REQUEST_LORA_EDITOR = 16603
+        const val REQUEST_MODEL_CENTER = 16604
+        const val EXTRA_TEST_SEED = "rin_test_seed"
+        const val EXTRA_TEST_PROMPT = "rin_test_prompt"
+        const val EXTRA_TEST_AUTORUN = "rin_test_autorun"
         private const val KEY_MODE = "mode"
         private const val KEY_RESOLUTION = "resolution"
         private const val KEY_NEGATIVE_LOCKED = "negative_locked"
@@ -581,3 +700,4 @@ class ImageModeController(
         const val REQUEST_RUNTIME_DOWNLOAD_DIR = 3302
     }
 }
+

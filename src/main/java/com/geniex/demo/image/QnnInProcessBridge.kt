@@ -1,6 +1,8 @@
 package com.geniex.demo.image
 
 import android.content.Context
+import android.os.Build
+import android.os.PowerManager
 import android.system.Os
 import android.util.Log
 import org.json.JSONObject
@@ -16,6 +18,8 @@ internal object QnnInProcessNative {
         System.loadLibrary("rinqnnbridge")
     }
 
+    external fun runLoraSequence(backendPath: String, systemLibraryPath: String, contextPath: String, inputListPath: String, outputDir: String, nativeInput: Boolean, nativeOutput: Boolean, testRoot: String, applyBinaryAdapters: Boolean): String
+
     external fun runContext(
         backendPath: String,
         systemLibraryPath: String,
@@ -24,7 +28,24 @@ internal object QnnInProcessNative {
         outputDir: String,
         nativeInput: Boolean,
         nativeOutput: Boolean,
+        graphName: String,
     ): String
+
+    external fun runContextPersistent(
+        backendPath: String,
+        systemLibraryPath: String,
+        contextPath: String,
+        inputListPath: String,
+        outputDir: String,
+        nativeInput: Boolean,
+        nativeOutput: Boolean,
+        graphName: String,
+    ): String
+
+    external fun releasePersistentContexts(): String
+    external fun beginHtpPerformance(backendPath: String, mode: Int): String
+    external fun setHtpPerformanceMode(mode: Int): String
+    external fun endHtpPerformance(): String
 }
 
 internal class QnnInProcessBridgeServer(
@@ -47,7 +68,22 @@ internal class QnnInProcessBridgeServer(
     fun start(): QnnInProcessBridgeServer {
         if (running.get()) return this
         diagDir.mkdirs()
+        val cacheReset = runCatching { QnnInProcessNative.releasePersistentContexts() }
+            .getOrElse { "reset-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("PERSISTENT_RESET raw=$cacheReset")
         preloadSummary = configureAndPreload()
+
+        val perfBackend = File(context.applicationInfo.nativeLibraryDir, "libQnnHtp.so")
+        val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            (context.getSystemService(Context.POWER_SERVICE) as PowerManager).currentThermalStatus
+        } else {
+            PowerManager.THERMAL_STATUS_NONE
+        }
+        val perfMode = if (thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE) HTP_MODE_BALANCED else HTP_MODE_BOOST
+        val perfStart = runCatching { QnnInProcessNative.beginHtpPerformance(perfBackend.absolutePath, perfMode) }
+            .getOrElse { "unsupported:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("HTP_PERF_START mode=$perfMode thermal=$thermalStatus raw=$perfStart")
+
         val socket = ServerSocket(0, 2, InetAddress.getByName("127.0.0.1"))
         server = socket
         running.set(true)
@@ -80,7 +116,7 @@ internal class QnnInProcessBridgeServer(
         return this
     }
 
-    private fun configureAndPreload(): String {
+    internal fun configureAndPreload(): String {
         val nativeDir = File(context.applicationInfo.nativeLibraryDir).absolutePath
         val modelLib = File(baseDir, "lib").absolutePath
         val adsp = listOf(
@@ -129,6 +165,8 @@ internal class QnnInProcessBridgeServer(
         val outputDir = req.getString("output_dir")
         val nativeInput = req.optBoolean("native_input", false)
         val nativeOutput = req.optBoolean("native_output", false)
+        val persistentContext = req.optBoolean("persistent_context", false)
+        val graphName = req.optString("graph_name", "")
         val stage = req.optString("stage", "qnn")
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val backend = File(nativeDir, "libQnnHtp.so")
@@ -141,18 +179,32 @@ internal class QnnInProcessBridgeServer(
                 .toString()
         }
         File(outputDir).mkdirs()
-        appendLog("REQUEST stage=$stage ctx=$ctx input=$inputList out=$outputDir nativeIn=$nativeInput nativeOut=$nativeOutput")
+        appendLog("REQUEST stage=$stage ctx=$ctx graph=${graphName.ifBlank { "<default>" }} input=$inputList out=$outputDir nativeIn=$nativeInput nativeOut=$nativeOutput persistent=$persistentContext")
         val started = System.nanoTime()
         return try {
-            val raw = QnnInProcessNative.runContext(
-                backend.absolutePath,
-                system.absolutePath,
-                ctx,
-                inputList,
-                outputDir,
-                nativeInput,
-                nativeOutput,
-            )
+            val raw = if (persistentContext) {
+                QnnInProcessNative.runContextPersistent(
+                    backend.absolutePath,
+                    system.absolutePath,
+                    ctx,
+                    inputList,
+                    outputDir,
+                    nativeInput,
+                    nativeOutput,
+                    graphName,
+                )
+            } else {
+                QnnInProcessNative.runContext(
+                    backend.absolutePath,
+                    system.absolutePath,
+                    ctx,
+                    inputList,
+                    outputDir,
+                    nativeInput,
+                    nativeOutput,
+                    graphName,
+                )
+            }
             val elapsed = (System.nanoTime() - started) / 1_000_000.0
             appendLog("RESULT stage=$stage elapsedMs=${"%.1f".format(elapsed)} raw=$raw")
             raw
@@ -181,6 +233,12 @@ internal class QnnInProcessBridgeServer(
         if (!running.getAndSet(false)) return
         runCatching { server?.close() }
         runCatching { worker?.join(1_500) }
+        val release = runCatching { QnnInProcessNative.releasePersistentContexts() }
+            .getOrElse { "release-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("PERSISTENT_RELEASE raw=$release")
+        val perfEnd = runCatching { QnnInProcessNative.endHtpPerformance() }
+            .getOrElse { "release-failed:${it.javaClass.simpleName}:${it.message ?: "unknown"}" }
+        appendLog("HTP_PERF_END raw=$perfEnd")
         appendLog("STOP")
         server = null
         worker = null
@@ -188,5 +246,7 @@ internal class QnnInProcessBridgeServer(
 
     companion object {
         private const val TAG = "RinQnnBridge"
+        const val HTP_MODE_BALANCED = 1
+        const val HTP_MODE_BOOST = 2
     }
 }

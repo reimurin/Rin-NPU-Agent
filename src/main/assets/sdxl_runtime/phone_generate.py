@@ -32,6 +32,8 @@ import time
 
 import numpy as np
 from phone_runtime_accel import RuntimeTensorArena, get_runtime_accel
+from rin_unified import prepare as prepare_lora, LoraError, shared_resolutions, shared_runtime
+_ACTIVE_LORA_SESSION = None
 from rin_tensor_io import (named_input, resolve_output, read_float_output, output_records,
                            write_input_rows, validate_input_list, prepare_output_dir, validate_output_tree)
 
@@ -214,33 +216,40 @@ SDXL_RESOLUTIONS = [
 
 
 def _discover_available_resolutions() -> list[tuple[int, int]]:
-    """Scan context/ for WxH subdirectories that contain a full set of UNet+VAE contexts."""
-    ctx_root = f"{DR}/context"
-    available: list[tuple[int, int]] = []
-    if not os.path.isdir(ctx_root):
-        return available
-    needed = {"unet_encoder_fp16.serialized.bin.bin",
-              "unet_decoder_fp16.serialized.bin.bin",
-              "vae_decoder.serialized.bin.bin"}
+    """Discover native resolutions backed by complete legacy or unified QNN contexts."""
+    ctx_root=f"{DR}/context"
+    available:set[tuple[int,int]]=set(shared_resolutions(DR))
+    if not os.path.isdir(ctx_root):return []
+    needed={"unet_encoder_fp16.serialized.bin.bin","unet_decoder_fp16.serialized.bin.bin","vae_decoder.serialized.bin.bin"}
     for entry in os.listdir(ctx_root):
-        if "x" not in entry:
-            continue
-        parts = entry.split("x")
-        if len(parts) != 2:
-            continue
-        try:
-            w, h = int(parts[0]), int(parts[1])
-        except ValueError:
-            continue
-        sub = os.path.join(ctx_root, entry)
-        if os.path.isdir(sub) and needed.issubset(set(os.listdir(sub))):
-            available.append((w, h))
-    # Also check flat layout (legacy 1024×1024)
-    if all(os.path.isfile(os.path.join(ctx_root, n)) for n in needed):
-        if (1024, 1024) not in available:
-            available.append((1024, 1024))
-    available.sort(key=lambda r: r[0] * r[1])
-    return available
+        match=re.fullmatch(r"(\d+)x(\d+)",entry)
+        if not match:continue
+        w,h=map(int,match.groups());sub=os.path.join(ctx_root,entry)
+        if 64<=w<=8192 and 64<=h<=8192 and not w%8 and not h%8 and all(os.path.isfile(os.path.join(sub,n)) and os.path.getsize(os.path.join(sub,n))>0 for n in needed):available.add((w,h))
+    if all(os.path.isfile(os.path.join(ctx_root,n)) and os.path.getsize(os.path.join(ctx_root,n))>0 for n in needed):available.add((1024,1024))
+
+    unified_root=os.path.join(ctx_root,'lora')
+    if os.path.isdir(unified_root):
+        for entry in os.listdir(unified_root):
+            if entry=='wai-v170-sm8750-lora-r64-1024-partitioned-v1':w,h=1024,1024
+            else:
+                match=re.fullmatch(r'wai-v170-sm8750-lora-r64-(\d+)x(\d+)-partitioned-v1',entry)
+                if not match:continue
+                w,h=map(int,match.groups())
+            if not 64<=w<=8192 or not 64<=h<=8192 or w%8 or h%8:continue
+            folder=os.path.join(unified_root,entry);manifest_path=os.path.join(folder,'lora_template.json')
+            try:
+                if not os.path.isfile(manifest_path) or os.path.getsize(manifest_path)>8*1024*1024:continue
+                with open(manifest_path,'r',encoding='utf-8-sig') as f:manifest=json.load(f)
+                if manifest.get('schema')!=1 or manifest.get('complete') is not True or manifest.get('model_id')!=entry or manifest.get('resolution')!=[w,h] or manifest.get('rank_capacity')!=64:continue
+                parts=[p for stage in ('encoder','decoder') for p in manifest.get('graphs',{}).get(stage,{}).get('parts',[])]
+                if len(parts)!=7:continue
+                if any(p.get('context_file')!=p.get('id','')+'.bin' or not os.path.isfile(os.path.join(folder,p.get('context_file',''))) or os.path.getsize(os.path.join(folder,p.get('context_file','')))!=p.get('context_bytes') for p in parts):continue
+                scoped_vae=os.path.join(ctx_root,f'{w}x{h}','vae_decoder.serialized.bin.bin')
+                legacy_vae=os.path.join(ctx_root,'vae_decoder.serialized.bin.bin')
+                if os.path.isfile(scoped_vae) and os.path.getsize(scoped_vae)>0 or (w,h)==(1024,1024) and os.path.isfile(legacy_vae) and os.path.getsize(legacy_vae)>0:available.add((w,h))
+            except (OSError,ValueError,TypeError,KeyError):continue
+    return sorted(available,key=lambda r:(r[0]*r[1],r[0]))
 
 
 def _snap_to_nearest_resolution(
@@ -295,6 +304,11 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
         "clip_g": f"{DR}/context/clip_g.serialized.bin.bin",
     }
 
+    shared = shared_runtime(DR, width, height)
+    if shared:
+        ctx.update({"encoder": shared["encoder"], "decoder": shared["decoder"], "vae": shared["vae"], "vae_graph": shared.get("vae_graph", shared["graph"])})
+        return ctx
+
     slot = SDXL_QNN_LORA_SLOT
     res_dir = f"{DR}/context/{width}x{height}"
     slot_res_candidates: list[str] = []
@@ -316,7 +330,10 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
             ctx["vae"] = f"{res_dir}/vae_decoder.serialized.bin.bin"
         else:
             ctx["vae"] = f"{DR}/context/vae_decoder.serialized.bin.bin"
-    elif os.path.isdir(res_dir):
+    elif (width, height) != (1024, 1024) or all(
+        os.path.isfile(os.path.join(res_dir, name)) and os.path.getsize(os.path.join(res_dir, name)) > 0
+        for name in ["unet_encoder_fp16.serialized.bin.bin", "unet_decoder_fp16.serialized.bin.bin", "vae_decoder.serialized.bin.bin"]
+    ):
         ctx["encoder"] = f"{res_dir}/unet_encoder_fp16.serialized.bin.bin"
         ctx["decoder"] = f"{res_dir}/unet_decoder_fp16.serialized.bin.bin"
         ctx["vae"] = f"{res_dir}/vae_decoder.serialized.bin.bin"
@@ -327,7 +344,7 @@ def _resolve_contexts(width: int = 1024, height: int = 1024) -> dict[str, str]:
         ctx["vae"] = f"{DR}/context/vae_decoder.serialized.bin.bin"
     return ctx
 
-_IMAGE_WIDTH, _IMAGE_HEIGHT, _WAS_SNAPPED = _snap_to_nearest_resolution(_REQ_WIDTH, _REQ_HEIGHT)
+_IMAGE_WIDTH, _IMAGE_HEIGHT, _WAS_SNAPPED = _REQ_WIDTH, _REQ_HEIGHT, False
 CONTEXTS = _resolve_contexts(_IMAGE_WIDTH, _IMAGE_HEIGHT)
 TOKENIZER_DIR = f"{DR}/phone_gen/tokenizer"
 OUTPUT_DIR = _env_first(("MODEL_TO_NPU_OUTPUT_DIR", "SDXL_QNN_OUTPUT_DIR"), f"{DR}/outputs")
@@ -399,9 +416,10 @@ QNN_PRESTAGE_RUNTIME = _env_bool(("SDXL_QNN_PRESTAGE_RUNTIME", "QNN_PRESTAGE_RUN
 QNN_PREWARM_ALL_CONTEXTS = _env_bool(("SDXL_QNN_PREWARM_ALL_CONTEXTS", "QNN_PREWARM_ALL_CONTEXTS"), True)
 QNN_PREWARM_PREVIEW = _env_bool(("SDXL_QNN_PREWARM_PREVIEW", "QNN_PREWARM_PREVIEW"), True)
 PREVIEW_PNG_COMPRESS_LEVEL = max(0, min(9, int(os.environ.get("SDXL_QNN_PREVIEW_PNG_COMPRESS", "0"))))
+PREVIEW_MAX_EDGE = 384
 FINAL_PNG_COMPRESS_LEVEL = max(0, min(9, int(os.environ.get("SDXL_QNN_FINAL_PNG_COMPRESS", "0"))))
 STRETCH_SAMPLE_STRIDE = max(1, int(os.environ.get("SDXL_QNN_STRETCH_SAMPLE_STRIDE", "4")))
-TAESD_BACKEND = os.environ.get("SDXL_QNN_TAESD_BACKEND", "gpu").strip().lower() or "gpu"
+TAESD_BACKEND = os.environ.get("SDXL_QNN_TAESD_BACKEND", "none").strip().lower() or "none"
 TAESD_BACKEND_LIB = os.environ.get("SDXL_QNN_TAESD_BACKEND_LIB", "").strip()
 TAESD_CONFIG_FILE = os.environ.get("SDXL_QNN_TAESD_CONFIG_FILE", "").strip()
 TAESD_QNN_NET_RUN = os.environ.get("SDXL_QNN_TAESD_NET_RUN", DEFAULT_TAESD_QNN_NET_RUN).strip() or QNN_NET_RUN
@@ -992,11 +1010,7 @@ def _prepare_preview_backend() -> None:
             "falling back to ONNX CPU if available"
         )
     else:
-        _emit_taesd_warning_once(
-            "no_preview_backend",
-            "TAESD live preview is unavailable; generation will continue without live preview",
-        )
-        _log("  [TAESD] no preview backend available")
+        _log("  [PREVIEW backend] LATENT_FAST (optional TAESD runtime not installed)")
 
 
 def _get_ort_session():
@@ -1494,6 +1508,8 @@ class EulerDiscreteScheduler:
 
 
 def _can_use_qnn_daemon() -> bool:
+    if callable(getattr(_ACTIVE_LORA_SESSION, "stage_for", None)):
+        return False
     return QNN_USE_DAEMON and os.path.exists(QNN_CONTEXT_RUNNER) and os.path.exists(QNN_SYSTEM_LIB)
 
 
@@ -1990,6 +2006,8 @@ class _QnnMultiContextServer:
 
 
 def _can_use_qnn_server() -> bool:
+    if callable(getattr(_ACTIVE_LORA_SESSION, "stage_for", None)):
+        return False
     if not QNN_USE_SERVER:
         return False
     if QNN_SHARED_SERVER and os.path.exists(QNN_SERVER_REQ_FIFO) and os.path.exists(QNN_SERVER_RSP_FIFO):
@@ -2060,7 +2078,8 @@ def _write_qnn_diagnostic(*, stage: str, cmd: list[str], env: dict, returncode: 
 
 
 def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_dir: str,
-                    native_input: bool, native_output: bool) -> tuple[float, dict]:
+                    native_input: bool, native_output: bool, persistent_context: bool = False,
+                    graph_name: str = "") -> tuple[float, dict]:
     if QNN_BRIDGE_PORT <= 0:
         raise RuntimeError("QNN in-process bridge port is not configured")
     request = {
@@ -2071,6 +2090,8 @@ def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_d
         "output_dir": output_dir,
         "native_input": bool(native_input),
         "native_output": bool(native_output),
+        "persistent_context": bool(persistent_context),
+        "graph_name": str(graph_name or ""),
     }
     payload = (json.dumps(request, ensure_ascii=False) + "\n").encode("utf-8")
     with socket.create_connection(("127.0.0.1", QNN_BRIDGE_PORT), timeout=10.0) as sock:
@@ -2098,7 +2119,26 @@ def _qnn_bridge_run(*, stage: str, ctx_path: str, input_list_path: str, output_d
 
 def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
             native_input=False, backend=None, model_path=None, config_file=None,
-            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None):
+            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None, graph_name=""):
+    options = dict(backend=backend, model_path=model_path, config_file=config_file,
+                   use_mmap=use_mmap, perf_profile=perf_profile, net_run_path=net_run_path, profile_tag=profile_tag)
+    if graph_name:
+        options["graph_name"] = graph_name
+    selector = getattr(_ACTIVE_LORA_SESSION, "stage_for", None)
+    stage = selector(ctx_path) if callable(selector) and ctx_path is not None else None
+    if stage is not None:
+        if model_path is not None: raise ValueError("Partitioned run cannot also specify model_path")
+        _log(f"[LoRA partitions] stage={stage} starting verified graph sequence")
+        return _ACTIVE_LORA_SESSION.execute(stage, input_list_path, output_dir, _qnn_run_single,
+            work_dir=WORK_DIR, native=native, native_input=native_input, **options)
+    return _qnn_run_single(ctx_path, input_list_path, output_dir, native,
+                           native_input=native_input, **options)
+
+
+def _qnn_run_single(ctx_path, input_list_path, output_dir, native=False, *,
+            native_input=False, backend=None, model_path=None, config_file=None,
+            use_mmap=None, perf_profile=None, net_run_path=None, profile_tag=None,
+            persistent_context=False, graph_name=""):
     """Run QNN context on NPU via qnn-net-run."""
     if ctx_path is None and model_path is None:
         raise ValueError("qnn_run needs either ctx_path or model_path")
@@ -2134,6 +2174,8 @@ def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
                 output_dir=output_dir,
                 native_input=native_input,
                 native_output=native,
+                persistent_context=persistent_context,
+                graph_name=graph_name,
             )
             output_count = validate_output_tree(output_dir, result_count)
             _log(f"[QNN OUTPUT OK] stage={stage} results={result_count} tensors={output_count}")
@@ -2152,10 +2194,13 @@ def qnn_run(ctx_path, input_list_path, output_dir, native=False, *,
             raise RuntimeError(f"QNN in-process bridge stage={stage} failed: {e}; log={diag_path}") from e
         _log(
             f"[QNN BRIDGE OK] stage={stage} {bridge_ms:.0f}ms "
-            f"nativeStage={bridge_response.get('stage','?')} backend={bridge_response.get('backend_build','')}"
+            f"nativeStage={bridge_response.get('stage','?')} backend={bridge_response.get('backend_build','')} "
+            f"persistent={'yes' if persistent_context else 'no'} cache={bridge_response.get('detail','')}"
         )
         return bridge_ms
 
+    if graph_name and effective_ctx_path is not None:
+        raise RuntimeError("Shared multi-graph context requires the in-process QNN bridge")
     if QNN_BRIDGE_REQUIRED and effective_ctx_path is not None and _is_htp_backend(backend_lib):
         raise RuntimeError("QNN in-process bridge is required but unavailable")
 
@@ -2815,11 +2860,11 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     if width % 8 or height % 8:
         raise ValueError(f"width ({width}) and height ({height}) must be multiples of 8")
 
-    # Snap to nearest available resolution if exact contexts don't exist
-    orig_w, orig_h = width, height
-    width, height, was_snapped = _snap_to_nearest_resolution(width, height)
-    if was_snapped:
-        _log(f"[resolution] {orig_w}x{orig_h} not available, snapped to {width}x{height}")
+    # Precompiled HTP contexts have fixed H/W; never pretend resizing is native generation.
+    available = _discover_available_resolutions()
+    if (width, height) not in available:
+        sizes = ", ".join(f"{w}x{h}" for w, h in available) or "none"
+        raise ValueError(f"Native resolution {width}x{height} is not installed; available={sizes}. Install matching UNet/VAE contexts.")
 
     latent_h, latent_w = height // 8, width // 8
     global CONTEXTS
@@ -2845,6 +2890,15 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     use_cfg = cfg_scale > 1.0
     if neg_prompt is None:
         neg_prompt = DEFAULT_NEG if use_cfg else ""
+
+    global _ACTIVE_LORA_SESSION
+    _ACTIVE_LORA_SESSION = None
+    _ACTIVE_LORA_SESSION = prepare_lora(prompt, neg_prompt, DR, width, height, log=_log)
+    if SDXL_QNN_LORA_SLOT and _ACTIVE_LORA_SESSION.metadata.get("active"):
+        raise LoraError("Do not combine a legacy precompiled LoRA slot with dynamic LoRA tags")
+    prompt, neg_prompt = _ACTIVE_LORA_SESSION.prompt, _ACTIVE_LORA_SESSION.negative
+    CONTEXTS.update(_ACTIVE_LORA_SESSION.contexts)
+    _write_atomic_json(os.path.join(QNN_DIAG_DIR, "lora_generation_latest.json"), _ACTIVE_LORA_SESSION.metadata)
 
     _ensure_unet_workdirs(use_cfg)
     runtime_prep_threads = _start_async_runtime_prep(preview)
@@ -3081,17 +3135,11 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
 
         if preview:
             stride = _preview_stride(steps)
-            is_last = (si == steps - 1)
-            if is_last or (si % stride == stride - 1):
-                if is_last:
-                    # Last step: run synchronously to guarantee preview is visible
-                    _join_preview_thread()
-                    _preview_step(latents.copy(), si, steps)
-                else:
-                    _start_bg_preview(latents.copy(), si, steps)
+            one_based = si + 1
+            if one_based < steps and one_based % stride == 0:
+                _start_bg_preview(latents.copy(), si, steps)
 
-    if preview:
-        _join_preview_thread()
+    # Final VAE has priority; never wait for a final-step preview.
 
     _log(f"  UNet total: {total_unet_ms:.0f}ms ({total_unet_ms/steps:.0f}ms/step)")
 
@@ -3111,7 +3159,7 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     _prepare_vae_input(latents, scaling_factor).tofile(f"{vd}/lat.raw")
     _write_input_list_once(f"{vd}/il.txt", [named_input("latent", f"{vd}/lat.raw")])
     # JNI converts model FP16 output to a documented FLOAT_ONLY file.
-    ms_vae = qnn_run(CONTEXTS["vae"], f"{vd}/il.txt", f"{vd}/out", native=False, profile_tag="vae_final")
+    ms_vae = qnn_run(CONTEXTS["vae"], f"{vd}/il.txt", f"{vd}/out", native=False, profile_tag="vae_final", graph_name=CONTEXTS.get("vae_graph", ""))
     _log(f"[VAE] {ms_vae:.0f}ms")
     img = _read_vae_image(f"{vd}/out", height, width)
     img = np.clip(img / 2 + 0.5, 0, 1)
@@ -3130,9 +3178,8 @@ def generate(prompt, seed=None, steps=8, cfg_scale=3.5, neg_prompt=None,
     tag = name or f"gen_s{seed}"
     out_path = f"{OUTPUT_DIR}/{tag}.png"
     img_pil = Image.fromarray(img_u8)
-    if img_pil.width != _REQ_WIDTH or img_pil.height != _REQ_HEIGHT:
-        _log(f"[resolution] Resizing output image from {img_pil.width}x{img_pil.height} to requested {_REQ_WIDTH}x{_REQ_HEIGHT}...")
-        img_pil = img_pil.resize((_REQ_WIDTH, _REQ_HEIGHT), Image.Resampling.LANCZOS)
+    if img_pil.size != (width, height):
+        raise ValueError(f"VAE output dimensions {img_pil.size} do not match requested native size {(width, height)}")
     img_pil.save(
         out_path,
         format="PNG",
@@ -3168,8 +3215,15 @@ def _preview_step(latents: np.ndarray, step_idx: int, total_steps: int) -> None:
             )
             _log(f"  [TAESD] QNN preview fallback to ONNX CPU: {e}")
 
-    sess = _get_ort_session()
+    sess = _get_ort_session() if os.path.exists(TAESD_ONNX) else None
     if sess is None:
+        t0 = time.time()
+        try:
+            _preview_step_latent_rgb(latents)
+            ms = (time.time() - t0) * 1000
+            _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] LATENT_RGB {ms:.0f}ms")
+        except Exception as e:
+            _log(f"  [PREVIEW fallback] latent RGB failed: {e}")
         return
 
     t0 = time.time()
@@ -3181,13 +3235,47 @@ def _preview_step(latents: np.ndarray, step_idx: int, total_steps: int) -> None:
         _ort_session = None
         _emit_taesd_warning_once(
             "preview_runtime_failed",
-            "TAESD live preview failed during generation; generation will continue without live preview",
+            "TAESD live preview failed; using fast latent preview while generation continues",
         )
-        _log(f"  [TAESD] preview error: {e}")
+        _log(f"  [TAESD] preview error; using latent RGB fallback: {e}")
+        try:
+            _preview_step_latent_rgb(latents)
+            ms = (time.time() - t0) * 1000
+            _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] LATENT_RGB {ms:.0f}ms")
+        except Exception as fallback_error:
+            _log(f"  [PREVIEW fallback] latent RGB failed: {fallback_error}")
         return
 
     ms = (time.time() - t0) * 1000
     _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] CPU {ms:.0f}ms")
+
+
+def _preview_step_latent_rgb(latents: np.ndarray) -> None:
+    """Guaranteed low-cost preview when TAESD backends are unavailable."""
+    arr = np.asarray(latents, dtype=np.float32)
+    if arr.ndim == 4:
+        if arr.shape[0] != 1:
+            raise ValueError(f"latent preview expects batch=1, got {arr.shape}")
+        arr = arr[0]
+    if arr.ndim != 3:
+        raise ValueError(f"latent preview expects rank-3/4 tensor, got {arr.shape}")
+    if arr.shape[0] == 4:
+        hwc = arr.transpose(1, 2, 0)
+    elif arr.shape[-1] == 4:
+        hwc = arr
+    else:
+        raise ValueError(f"latent preview expects 4 channels, got {arr.shape}")
+    matrix = np.asarray([
+        [0.3920, 0.4054, 0.4549],
+        [-0.2634, -0.0196, 0.0653],
+        [0.0568, 0.1687, -0.0755],
+        [-0.3112, -0.2359, -0.2076],
+    ], dtype=np.float32)
+    rgb = np.tensordot(hwc, matrix, axes=([2], [0]))
+    lo = np.percentile(rgb, 1.0, axis=(0, 1), keepdims=True)
+    hi = np.percentile(rgb, 99.0, axis=(0, 1), keepdims=True)
+    rgb = np.clip((rgb - lo) / np.maximum(hi - lo, 1e-5), 0.0, 1.0)
+    _save_preview_png(rgb)
 
 
 def _preview_tensor_to_hwc(out_tensor: np.ndarray) -> np.ndarray:
@@ -3235,8 +3323,11 @@ def _save_preview_png(out_tensor: np.ndarray) -> None:
 
     tmp_path = PREVIEW_PNG + ".tmp"
     img_pil = Image.fromarray(img_u8)
-    if img_pil.width != _REQ_WIDTH or img_pil.height != _REQ_HEIGHT:
-        img_pil = img_pil.resize((_REQ_WIDTH, _REQ_HEIGHT), Image.Resampling.BILINEAR)
+    longest = max(img_pil.size)
+    if longest > PREVIEW_MAX_EDGE:
+        scale = PREVIEW_MAX_EDGE / float(longest)
+        target = (max(1, int(round(img_pil.width * scale))), max(1, int(round(img_pil.height * scale))))
+        img_pil = img_pil.resize(target, Image.Resampling.BILINEAR)
     img_pil.save(
         tmp_path,
         format="PNG",
@@ -3357,10 +3448,8 @@ def _preview_stride(total_steps: int) -> int:
 def _start_bg_preview(latents_copy: np.ndarray, step_idx: int, total_steps: int) -> None:
     global _preview_thread
     if _preview_thread and _preview_thread.is_alive():
-        _preview_thread.join(timeout=0.2)
-        if _preview_thread.is_alive():
-            _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] skipped (previous decode still running)")
-            return
+        _log(f"  [PREVIEW step {step_idx+1}/{total_steps}] skipped (decoder busy; generation has priority)")
+        return
     _preview_thread = threading.Thread(
         target=_preview_step,
         args=(latents_copy, step_idx, total_steps),
@@ -3385,10 +3474,16 @@ def _ensure_unet_workdirs(use_cfg):
         os.makedirs(f"{WORK_DIR}/unet/dec_batch", exist_ok=True)
 
 
+def _lora_inputs(stage):
+    if _ACTIVE_LORA_SESSION is None:
+        return []
+    entries = _ACTIVE_LORA_SESSION.inputs.get(stage, [])
+    return [entries] if isinstance(entries, str) else list(entries)
+
 def _enc_dec_inputs(base, smp_path, ts_path):
     return [named_input("encoder_hidden_states", f"{base}/enc.raw"),
             named_input("timestep", ts_path), named_input("time_ids", f"{base}/tid.raw"),
-            named_input("text_embeds", f"{base}/te.raw"), named_input("sample", smp_path)]
+            named_input("text_embeds", f"{base}/te.raw"), named_input("sample", smp_path)] + _lora_inputs("encoder")
 
 def _dec_entries_from_enc_out(base, enc_out_dir):
     # Explicit semantic mapping; same-size skip tensors must never be sorted or guessed.
@@ -3397,7 +3492,7 @@ def _dec_entries_from_enc_out(base, enc_out_dir):
     for name, legacy in mapping:
         path, info = resolve_output(enc_out_dir, name, legacy_index=legacy)
         entries.append(named_input(name, path))
-    return entries
+    return entries + _lora_inputs("decoder")
 
 def _read_noise_pred(out_dec_dir, result_idx=0, latent_h=128, latent_w=128):
     return read_float_output(f"{out_dec_dir}/Result_{result_idx}", "noise_pred",

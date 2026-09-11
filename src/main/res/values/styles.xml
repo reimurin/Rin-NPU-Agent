@@ -98,4 +98,37 @@
         <item name="indicatorColor">@color/rin_primary</item>
         <item name="trackColor">@color/rin_surface_soft</item>
     </style>
+    <style name="ThemeOverlay.Rin.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorPrimary">@color/rin_primary</item>
+        <item name="colorSurface">@color/rin_surface</item>
+        <item name="colorOnSurface">@color/rin_text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/rin_text_secondary</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/Widget.Rin.Dialog.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/Widget.Rin.Dialog.Body</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Rin.Dialog.Positive</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Rin.Dialog.Ghost</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Rin.Dialog.Ghost</item>
+    </style>
+    <style name="Widget.Rin.Dialog.Title" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Rin.PageTitle</item>
+        <item name="android:textColor">@color/rin_text_primary</item>
+    </style>
+    <style name="Widget.Rin.Dialog.Body" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Rin.Body</item>
+        <item name="android:textColor">@color/rin_text_secondary</item>
+    </style>
+    <style name="Widget.Rin.Dialog.Positive" parent="Widget.Rin.Button.Primary">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minWidth">64dp</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:singleLine">true</item>
+    </style>
+    <style name="Widget.Rin.Dialog.Ghost" parent="Widget.Rin.Button.Ghost">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minWidth">64dp</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:singleLine">true</item>
+    </style>
 </resources>

@@ -45,3 +45,9 @@ __pycache__/
 *.ttf
 *.otf
 qnn-native-sdk-2.48/
+
+/native/obj/
+/native/libs/
+
+# Required QAIRT QNN probe asset shipped in the APK
+!src/main/assets/sdxl_runtime/qnn_probe/libCalculator_skel.so

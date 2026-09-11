@@ -65,8 +65,24 @@ sealed class ImageGenerationEvent {
     data class Warning(val message: String) : ImageGenerationEvent()
     data class Complete(val file: File, val totalSeconds: Double?) : ImageGenerationEvent()
     data class Failure(val message: String, val exitCode: Int? = null) : ImageGenerationEvent()
+    data object Cancelled : ImageGenerationEvent()
 
     enum class Stage { PREPARING, CLIP, DENOISING, VAE, SAVING, COMPLETE }
+}
+
+internal data class ImagePreviewStep(val step: Int, val totalSteps: Int)
+
+private val IMAGE_PREVIEW_PROGRESS_REGEX = Regex(
+    "\\[PREVIEW\\s+(?:step\\s+)?(\\d+)/(\\d+)]",
+    RegexOption.IGNORE_CASE,
+)
+
+internal fun parseImagePreviewStep(line: String, fallbackTotal: Int): ImagePreviewStep? {
+    val match = IMAGE_PREVIEW_PROGRESS_REGEX.find(line) ?: return null
+    val step = match.groupValues[1].toIntOrNull() ?: return null
+    val total = match.groupValues[2].toIntOrNull() ?: fallbackTotal
+    if (step <= 0 || total <= 0 || step > total) return null
+    return ImagePreviewStep(step, total)
 }
 
 class ImageGenerationRuntime(private val context: Context) {
@@ -78,7 +94,7 @@ class ImageGenerationRuntime(private val context: Context) {
         get() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "sdxl_qnn")
 
     fun hasStorageAccess(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) StorageAccess.granted() else true
 
     fun inspect(baseDir: File = defaultBaseDir): ImageRuntimeStatus {
         val permission = hasStorageAccess()
@@ -111,10 +127,9 @@ class ImageGenerationRuntime(private val context: Context) {
         val pythonProbe = python?.let { checkPythonDependencies(it) }
         val pyDeps = pythonProbe?.ok == true
         val resolutions = discoverResolutions(baseDir)
-        val previewSupported =
-            File(baseDir, "phone_gen/taesd_decoder.onnx").isFile ||
-                File(baseDir, "context/taesd_decoder.serialized.bin.bin").isFile ||
-                resolutions.any { File(baseDir, "context/${it.key}/taesd_decoder.serialized.bin.bin").isFile }
+        // alpha8 always has a NumPy/Pillow latent-preview fallback. TAESD remains an
+        // optional quality upgrade rather than a prerequisite for live preview.
+        val previewSupported = pyDeps
 
         val detail = when {
             !baseDir.isDirectory -> "Model directory does not exist"
@@ -161,7 +176,7 @@ class ImageGenerationRuntime(private val context: Context) {
         baseDir: File = defaultBaseDir,
         callback: (ImageGenerationEvent) -> Unit,
     ): Boolean {
-        if (!running.compareAndSet(false, true)) return false
+        if (LoraSelfTest.busy.get() || !running.compareAndSet(false, true)) return false
         thread(name = "rin-sdxl-generation") {
             var totalSeconds: Double? = null
             var savedFile: File? = null
@@ -175,7 +190,7 @@ class ImageGenerationRuntime(private val context: Context) {
                     return@thread
                 }
                 if (!status.supports(request.resolution)) {
-                    callback(ImageGenerationEvent.Failure("Resolution ${request.resolution.key} is not installed"))
+                    callback(ImageGenerationEvent.Failure("原生尺寸 ${request.resolution.key} 尚未安装对应模型。现有 context 不会自动改变宽高。"))
                     return@thread
                 }
 
@@ -249,7 +264,6 @@ class ImageGenerationRuntime(private val context: Context) {
 
                 val unetRegex = Regex("\\[UNet\\s+(\\d+)/(\\d+)]")
                 val unetStartRegex = Regex("\\[UNet START\\s+(\\d+)/(\\d+)]")
-                val previewRegex = Regex("\\[PREVIEW\\s+(\\d+)/(\\d+)]")
                 val totalRegex = Regex("^Total:\\s*([0-9.]+)s", RegexOption.IGNORE_CASE)
                 val savedRegex = Regex("^Saved:\\s*(.+)$", RegexOption.IGNORE_CASE)
                 var lastErrorLine: String? = null
@@ -260,6 +274,7 @@ class ImageGenerationRuntime(private val context: Context) {
                         runCatching { generationLog?.appendText(line + "\n") }
                         diagnosticTail += line.take(6_000)
                         if (diagnosticTail.size > 80) diagnosticTail.removeAt(0)
+                        val previewStep = parseImagePreviewStep(line, request.steps)
                         when {
                             line.startsWith("[CLIP", ignoreCase = true) -> {
                                 callback(ImageGenerationEvent.Progress(8, ImageGenerationEvent.Stage.CLIP, rawLine = line))
@@ -278,13 +293,12 @@ class ImageGenerationRuntime(private val context: Context) {
                                 val p = 10 + ((step.toDouble() / total.coerceAtLeast(1)) * 75.0).roundToInt()
                                 callback(ImageGenerationEvent.Progress(p.coerceIn(10, 85), ImageGenerationEvent.Stage.DENOISING, step, total, line))
                             }
-                            previewRegex.containsMatchIn(line) -> {
-                                val m = previewRegex.find(line)!!
+                            previewStep != null -> {
                                 callback(ImageGenerationEvent.Progress(
-                                    percent = 10 + (((m.groupValues[1].toIntOrNull() ?: 0).toDouble() / (m.groupValues[2].toIntOrNull() ?: request.steps).coerceAtLeast(1)) * 75.0).roundToInt(),
+                                    percent = 10 + ((previewStep.step.toDouble() / previewStep.totalSteps) * 75.0).roundToInt(),
                                     stage = ImageGenerationEvent.Stage.DENOISING,
-                                    step = m.groupValues[1].toIntOrNull() ?: 0,
-                                    totalSteps = m.groupValues[2].toIntOrNull() ?: request.steps,
+                                    step = previewStep.step,
+                                    totalSteps = previewStep.totalSteps,
                                     rawLine = line,
                                 ))
                             }
@@ -580,24 +594,7 @@ class ImageGenerationRuntime(private val context: Context) {
         env["PYTHONUTF8"] = "1"
     }
 
-    private fun discoverResolutions(baseDir: File): List<ImageResolution> {
-        val root = File(baseDir, "context")
-        if (!root.isDirectory) return emptyList()
-        val result = mutableSetOf<ImageResolution>()
-        root.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
-            val m = Regex("^(\\d+)x(\\d+)$").matchEntire(dir.name) ?: return@forEach
-            val resolution = ImageResolution(m.groupValues[1].toInt(), m.groupValues[2].toInt())
-            if (hasResolutionContexts(dir)) result += resolution
-        }
-        if (hasResolutionContexts(root)) result += ImageResolution(1024, 1024)
-        return result.sortedWith(compareBy<ImageResolution> { it.width * it.height }.thenBy { it.width })
-    }
-
-    private fun hasResolutionContexts(dir: File): Boolean = listOf(
-        "unet_encoder_fp16.serialized.bin.bin",
-        "unet_decoder_fp16.serialized.bin.bin",
-        "vae_decoder.serialized.bin.bin",
-    ).all { File(dir, it).isFile }
+    private fun discoverResolutions(baseDir: File): List<ImageResolution> = ResolutionCatalog.discover(baseDir)
 
     private fun configureEnvironment(
         env: MutableMap<String, String>,
@@ -705,13 +702,6 @@ class ImageGenerationRuntime(private val context: Context) {
         private const val LEGACY_BAD_CLIP_G_RELATIVE = "context/clip_g.serialized.bin.bin"
         private const val LEGACY_BAD_CLIP_G_BYTES = 42_991_616L
         private const val LEGACY_BAD_CLIP_G_SHA256 = "604c9dd468ca74553138502d1e32b18129b6671cc91c68f0213403ae769bc2d4"
-        private val DRIVER_FILES = listOf("phone_generate.py", "phone_runtime_accel.py", "rin_tensor_io.py")
-        val UI_RESOLUTIONS = listOf(
-            ImageResolution(1024, 1024),
-            ImageResolution(1216, 832),
-            ImageResolution(832, 1216),
-            ImageResolution(1344, 768),
-            ImageResolution(768, 1344),
-        )
+        private val DRIVER_FILES = listOf("phone_generate.py", "phone_runtime_accel.py", "rin_tensor_io.py", "rin_lora.py", "rin_lora_module_banks.py", "rin_lora_partitioned.py", "rin_unified.py")
     }
 }

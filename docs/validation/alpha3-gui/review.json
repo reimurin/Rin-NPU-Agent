@@ -1,0 +1,10 @@
+{
+  "scope": "Native Robolectric renders of synthetic preset data; not handset screenshots",
+  "android_tests": 57,
+  "failures": 0,
+  "images": [
+    "presets_closed.png",
+    "presets_swiped.png",
+    "preset_editor.png"
+  ]
+}

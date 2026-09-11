@@ -1,0 +1,31 @@
+{
+  "version": "1.6.0-alpha.3",
+  "version_code": 20,
+  "application_id": "com.geniex.demo",
+  "apk_bytes": 128850953,
+  "apk_sha256": "20345dda47fb61b66918bed51e3fd8ef9293ad2f11563ec75e3f31f6638ff21d",
+  "signer_sha256": "afeef7cf03c2bc3b411932df89330af1a6416f62e379096d72807305e3d9f801",
+  "android_tests": {
+    "tests": 74,
+    "failures": 0,
+    "errors": 0
+  },
+  "prior_unchanged_partition_pipeline_tests": 24,
+  "full_wai_handset_tested": false,
+  "model_component": "wai-v170-sm8750-lora-r64-1024-partitioned-v1",
+  "model_release_tag": "wai-lora-sm8750-r64-partitioned-v1",
+  "model_contract_commit": "1450197076c942254708970f027579c533f2c260",
+  "visual_review": {
+    "source": "native Robolectric renders, not handset screenshots",
+    "reviewed": true,
+    "fixed": "Filled-field hint/value overlap; top padding 28dp, bottom 10dp",
+    "regression": "Actual collapsed hint bounds stay above value font ascent in focused/unfocused single/multiline inputs",
+    "images": {
+      "presets_closed.png": "1a3e8f0a58f4a45e88611d53a0e4c952b4910449e449c7a37d8be0be425f4f7a",
+      "presets_swiped.png": "3be613d9cdf75e18d40c0bac9299c1eb0efbb82a4999013335af2204ea9d8c98",
+      "preset_editor.png": "97c9d7d144b334d8ab7163934ed4a02cf2712a055d5cf4f07ea5dc9f1599f0fd",
+      "lora_management.png": "ff51b6629a6bc84ce6597b907aa9439f15e838e558182329107f7f9bbb401e3c"
+    }
+  },
+  "verified_at": "2026-09-07T10:16:16"
+}

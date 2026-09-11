@@ -1,0 +1,197 @@
+{
+  "checks": [
+    {
+      "op": "MatMul",
+      "rank": 8,
+      "weight": 0,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 8,
+      "weight": 0.8,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 8,
+      "weight": 1.1,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 8,
+      "weight": -0.4,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 8,
+      "weight": 0,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 16,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 16,
+      "weight": 0.8,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 16,
+      "weight": 1.1,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 16,
+      "weight": -0.4,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 16,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 32,
+      "weight": 0,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 32,
+      "weight": 0.8,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 32,
+      "weight": 1.1,
+      "max_error": 2.2351741790771484e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 32,
+      "weight": -0.4,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "MatMul",
+      "rank": 32,
+      "weight": 0,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 8,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 8,
+      "weight": 0.8,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 8,
+      "weight": 1.1,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 8,
+      "weight": -0.4,
+      "max_error": 2.2351741790771484e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 8,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 16,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 16,
+      "weight": 0.8,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 16,
+      "weight": 1.1,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 16,
+      "weight": -0.4,
+      "max_error": 1.4901161193847656e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 16,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 32,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 32,
+      "weight": 0.8,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 32,
+      "weight": 1.1,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 32,
+      "weight": -0.4,
+      "max_error": 2.9802322387695312e-08
+    },
+    {
+      "op": "Gemm",
+      "rank": 32,
+      "weight": 0,
+      "max_error": 2.9802322387695312e-08
+    }
+  ],
+  "stages": {
+    "encoder": {
+      "modules": 362,
+      "input_bytes": 170844160,
+      "source_sha256": "e68aa5b5158ae6e944c0b96ce5050d07ae4e24c9309bc2f71a3315584063a999"
+    },
+    "decoder": {
+      "modules": 381,
+      "input_bytes": 175546368,
+      "source_sha256": "c633ec98437e9c60041cf74f4446b06c20005f3985ff2c4adbb06b4360bce48a"
+    }
+  },
+  "passed": 30
+}

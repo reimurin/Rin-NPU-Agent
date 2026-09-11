@@ -9,6 +9,8 @@ if (file('_shared/android/common.gradle').exists()) {
     apply from: '_shared/android/common.gradle'
 }
 
+def rinDebugKeystore = file('../../toolchain/android-user-home/debug.keystore')
+
 android {
     namespace 'com.geniex.demo'
     ndkVersion '27.3.13750724'
@@ -18,14 +20,30 @@ android {
         applicationId 'com.geniex.demo'
         minSdk 31
         targetSdk 34
-        versionCode 17
-        versionName '1.5.11'
+        versionCode 28
+        versionName '1.6.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    signingConfigs {
+        debug {
+            if (rinDebugKeystore.exists()) {
+                storeFile rinDebugKeystore
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+                enableV1Signing false
+                enableV2Signing false
+                enableV3Signing true
+                enableV4Signing false
+            }
+        }
     }
 
     buildTypes {
         debug {
             buildConfigField 'boolean', 'TEST_MODEL_SEED', 'false'
+            signingConfig signingConfigs.debug
         }
         release {
             buildConfigField 'boolean', 'TEST_MODEL_SEED', 'false'
@@ -63,9 +81,22 @@ android {
             'lib/arm64-v8a/libQnnHtpV79Stub.so',
             'lib/arm64-v8a/libQnnHtpV79.so',
             'lib/arm64-v8a/libQnnHtpV79Skel.so',
+            '**/libQnnHtpV79.so',
+            '**/libQnnHtpV79Skel.so',
             'lib/arm64-v8a/libQnnSystem.so',
             'lib/arm64-v8a/librinqnnnetrun.so',
         ]
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            maxHeapSize = '2g'
+            maxParallelForks = 1
+            systemProperty 'rin.render.dir', System.getenv('RIN_RENDER_DIR') ?: file('../../toolchain/temp/integration-1.6-ui-review').absolutePath
+            systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+            systemProperty 'maven.repo.local', 'H:/Rin_Android_NPU_Agent/toolchain/robolectric-maven'
+        }
     }
 
     buildFeatures {
@@ -79,6 +110,10 @@ android {
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16'
+    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'org.json:json:20240303'
     // GenieX Android binding (published to Maven Central).
     implementation 'com.qualcomm.qti:geniex-android:0.3.5'
 
@@ -94,6 +129,9 @@ dependencies {
 
     // Material Components (provides the app theme)
     implementation 'com.google.android.material:material:1.12.0'
+
+    // Ed25519 verification for signed model manifests (minSdk 31; framework Ed25519 is API 33+).
+    implementation 'com.google.crypto.tink:tink-android:1.23.0'
 
     // Markwon (Markdown rendering)
     implementation 'io.noties.markwon:core:4.6.2'
@@ -113,4 +151,8 @@ dependencies {
     androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
+
+
+// Generated output stays off the nearly-full source drive.
+layout.buildDirectory.set(file("../../toolchain/temp/integration-1.6-gradle-build"))
 

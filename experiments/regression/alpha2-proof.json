@@ -1,0 +1,56 @@
+{
+  "version": "1.6.0-alpha.2",
+  "code": 19,
+  "application_id": "com.geniex.demo",
+  "apk_bytes": 128751798,
+  "apk_sha256": "1d70381b31c0d5acbd8651ae7c9a720a3a486fdad011fdc1b1fd6faf77ec0740",
+  "cert_sha256": "afeef7cf03c2bc3b411932df89330af1a6416f62e379096d72807305e3d9f801",
+  "launcher": "com.geniex.demo.MainActivity",
+  "android_tests": 56,
+  "android_failures": 0,
+  "python_resolution_tests": 12,
+  "qnn_core_matches": 9,
+  "synthetic_lora_assets": 49,
+  "phone_tested": false,
+  "native_resolutions_added": [],
+  "legacy_native_resolution": "1024x1024",
+  "crash_reproduction": {
+    "exception": "ClassCastException",
+    "phase": "TextInputLayout first measure and draw",
+    "host_reproduced": true,
+    "handset_stacktrace_received": false,
+    "fix": "Use LinearLayout.LayoutParams for the TextInputLayout input child"
+  },
+  "suites": [
+    {
+      "name": "com.geniex.demo.image.LoraContractTest",
+      "tests": 21,
+      "failures": 0
+    },
+    {
+      "name": "com.geniex.demo.image.LoraStartupTest",
+      "tests": 6,
+      "failures": 0
+    },
+    {
+      "name": "com.geniex.demo.image.MainIntegrationTest",
+      "tests": 7,
+      "failures": 0
+    },
+    {
+      "name": "com.geniex.demo.image.PresetStoreTest",
+      "tests": 12,
+      "failures": 0
+    },
+    {
+      "name": "com.geniex.demo.image.PresetUiTest",
+      "tests": 3,
+      "failures": 0
+    },
+    {
+      "name": "com.geniex.demo.image.ResolutionCatalogTest",
+      "tests": 7,
+      "failures": 0
+    }
+  ]
+}

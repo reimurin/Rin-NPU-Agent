@@ -1,0 +1,7 @@
+
+# Synthetic test payloads must survive checkout byte-for-byte.
+src/main/assets/lora_selftest/*.bin -text
+src/main/assets/lora_selftest/*.raw -text
+src/main/assets/lora_dynamic_selftest/*.bin -text
+src/main/assets/lora_dynamic_selftest/*.raw -text
+native/sampleapp_lora_sequence.patch -whitespace
