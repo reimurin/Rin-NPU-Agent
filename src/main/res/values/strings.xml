@@ -102,6 +102,7 @@
     <string name="model_state_loading">Loading model…</string>
     <string name="model_state_loaded">Loaded: %1$s</string>
     <string name="model_state_failed">Model load failed</string>
+    <string name="api_endpoint">OpenAI API: %1$s\nListening on all network interfaces</string>
     <string name="workspace_status_none">No folder authorization</string>
     <string name="workspace_status_ready">Read/write access verified</string>
     <string name="workspace_status_read_only">Folder is not writable; select it again</string>
