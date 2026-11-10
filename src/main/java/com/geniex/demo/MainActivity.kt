@@ -95,6 +95,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileNotFoundException
@@ -154,6 +156,10 @@ class MainActivity : FragmentActivity() {
 
     private var isLoadLlmModel = false
     private var isLoadVlmModel = false
+    private var loadedModelData: ModelData? = null
+    private var apiServer: OpenAiApiServer? = null
+    private val inferenceMutex = Mutex()
+    private val apiLogLines = ArrayDeque<String>()
 
     /**
      * Vision geometry of the currently loaded VLM, read from its mmproj GGUF.
@@ -645,8 +651,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun resetLoadState() {
+        stopOpenAiApi()
         isLoadLlmModel = false
         isLoadVlmModel = false
+        loadedModelData = null
         // Stale geometry would size preprocessing for the previous model.
         vlmVisionConfig = null
     }
@@ -878,6 +886,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun onLoadModelSuccess(tip: String) {
+        startOpenAiApiIfSupported()
         runOnUiThread {
             Toast
                 .makeText(
@@ -941,6 +950,7 @@ class MainActivity : FragmentActivity() {
     ) {
         modelScope.launch {
             resetLoadState()
+            loadedModelData = selectModelData
             val paths = ModelManagerWrapper.getPaths(selectModelData.modelName)
             if (paths == null) {
                 onLoadModelFailed(getString(R.string.model_paths_unavailable))
@@ -1178,6 +1188,7 @@ class MainActivity : FragmentActivity() {
             return
         }
         modelScope.launch {
+            stopOpenAiApi()
             val result = runCatching {
                 if (isLoadVlmModel) {
                     runCatching { vlmWrapper.stopStream() }
@@ -1214,6 +1225,105 @@ class MainActivity : FragmentActivity() {
                 }
                 after()
             }
+        }
+    }
+
+    /** Starts the network API only for the loaded Gemma 4 text model. */
+    private fun startOpenAiApiIfSupported() {
+        val model = loadedModelData ?: return
+        if (!isLoadLlmModel || !model.id.contains("gemma-4", ignoreCase = true)) return
+        stopOpenAiApi()
+        val server = OpenAiApiServer(model.id, ::appendApiLog, ::completeApiRequest)
+        apiServer = server
+        runCatching { server.start() }
+            .onSuccess { url ->
+                appendApiLog("OpenAI-compatible API ready: $url")
+                runOnUiThread {
+                    binding.tvApiEndpoint.text = getString(R.string.api_endpoint, url)
+                    binding.tvApiEndpoint.visibility = View.VISIBLE
+                    binding.tvApiLogs.visibility = View.VISIBLE
+                }
+            }
+            .onFailure {
+                appendApiLog("API startup failed: ${it.stackTraceToString()}")
+                apiServer = null
+            }
+    }
+
+    private fun stopOpenAiApi() {
+        apiServer?.stop()
+        apiServer = null
+        runOnUiThread {
+            binding.tvApiEndpoint.visibility = View.GONE
+            binding.tvApiLogs.visibility = View.GONE
+        }
+    }
+
+    private fun appendApiLog(message: String) {
+        val line = "${System.currentTimeMillis()} $message"
+        Log.d(API_TAG, line)
+        val visibleLog = synchronized(apiLogLines) {
+            message.lineSequence().forEach {
+                apiLogLines.addLast("${System.currentTimeMillis()} $it")
+                while (apiLogLines.size > MAX_API_LOG_LINES) apiLogLines.removeFirst()
+            }
+            runCatching {
+                val dir = File(filesDir, "logs").apply { mkdirs() }
+                File(dir, "openai-api.log").appendText(line + "\n")
+            }
+            apiLogLines.joinToString("\n")
+        }
+        runOnUiThread {
+            binding.tvApiLogs.text = visibleLog
+        }
+    }
+
+    private suspend fun completeApiRequest(
+        messages: List<ApiMessage>,
+        maxTokens: Int,
+        onToken: (String) -> Unit,
+    ): ApiCompletionResult = inferenceMutex.withLock {
+        check(isLoadLlmModel) { "No text model is loaded" }
+        check(!isGenerating) { "Inference engine is busy" }
+        isGenerating = true
+        runOnUiThread { refreshSendButtonState() }
+        try {
+            // Each OpenAI request is self-contained. Clear llama.cpp's native
+            // context/KV cache so a previous caller's prompt or generated
+            // tokens cannot leak into this request. Conversation history must
+            // be supplied explicitly in this request's messages array.
+            llmWrapper.reset()
+            appendApiLog("native context reset for stateless API request")
+            val sdkMessages = messages.map { ChatMessage(it.role, it.content) }.toTypedArray()
+            val templated = llmWrapper.applyChatTemplate(sdkMessages, null, enableThinking).getOrThrow()
+            appendApiLog("formatted_prompt: ${templated.formattedText}")
+            val text = StringBuilder()
+            var profile: ApiCompletionProfile? = null
+            var failure: Throwable? = null
+            llmWrapper.generateStreamFlow(
+                templated.formattedText,
+                GenerationConfigSample(maxTokens = maxTokens).toGenerationConfig(),
+            ).collect { result ->
+                when (result) {
+                    is LlmStreamResult.Token -> {
+                        text.append(result.text)
+                        onToken(result.text)
+                    }
+                    is LlmStreamResult.Completed -> profile = ApiCompletionProfile(
+                        promptTokens = result.profile.promptTokens.toInt(),
+                        completionTokens = result.profile.generatedTokens.toInt(),
+                        ttftMs = result.profile.ttftMs.toDouble(),
+                        prefillTokensPerSecond = result.profile.prefillSpeed.toDouble(),
+                        decodeTokensPerSecond = result.profile.decodingSpeed.toDouble(),
+                    )
+                    is LlmStreamResult.Error -> failure = result.throwable
+                }
+            }
+            failure?.let { throw it }
+            ApiCompletionResult(text.toString(), checkNotNull(profile) { "Inference ended without a completion profile" })
+        } finally {
+            isGenerating = false
+            runOnUiThread { refreshSendButtonState() }
         }
     }
 
@@ -1980,12 +2090,15 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        stopOpenAiApi()
         if (::imageModeController.isInitialized) imageModeController.dispose()
         super.onDestroy()
     }
 
     companion object {
         private const val TAG = "GenieXDemo"
+        private const val API_TAG = "GenieXOpenAI"
+        private const val MAX_API_LOG_LINES = 200
         private const val REQUEST_WORKSPACE = 3001
         private const val MAX_AGENT_STEPS = 6
         private const val KEY_AGENT_ENABLED = "agent_enabled"
